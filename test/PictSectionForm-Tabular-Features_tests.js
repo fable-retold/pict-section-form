@@ -114,7 +114,7 @@ function makeApplication(pGroupConfig, pExtraAppData)
 		}
 	}
 	let tmpManifest = JSON.parse(JSON.stringify(_BaseManifest));
-	tmpManifest.Sections[0].Groups = [ pGroupConfig ];
+	tmpManifest.Sections[0].Groups = Array.isArray(pGroupConfig) ? pGroupConfig : [ pGroupConfig ];
 	TestApp.default_configuration = JSON.parse(JSON.stringify(libPictSectionForm.PictFormApplication.default_configuration));
 	TestApp.default_configuration.pict_configuration =
 	{
@@ -856,6 +856,252 @@ suite('PictSectionForm Tabular Features', () =>
 				tmpLayout.toggleTabularRowSelection('PictSectionForm-Class', 0, 0, true);
 				Expect(Array.isArray(_Pict.AppData.MyRowPicks)).to.equal(true, 'selection stored at the custom address');
 				Expect(_Pict.AppData.MyRowPicks[0]).to.equal(true);
+			}, fDone);
+		});
+
+		test('Pre-seeded row selection re-applies the highlight class on marshal (reload case)', (fDone) =>
+		{
+			// Simulate a form reload: AppData already contains a selection array (from a prior
+			// save) before the table is ever rendered. After the table DOM exists and
+			// onDataMarshalToForm fires, every selected row should carry the highlight class.
+			let App = makeApplication(
+				{
+					Hash: 'Students',
+					Layout: 'Tabular',
+					RecordSetAddress: 'Students',
+					RecordManifest: 'StudentEditor',
+					RowSelection: true
+				},
+				{ Students_RowSelection: [ true, false, true, false, false ] });
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpLayout = _Pict.providers['Pict-Layout-Tabular'];
+
+				// Build the table DOM the reapply will target. Mirrors the real layout's
+				// markup -- a group container with rows tagged by data-tabular-row-index.
+				let tmpContainer = window.document.createElement('div');
+				tmpContainer.id = `GROUP-${tmpView.formID}-Students`;
+				tmpContainer.innerHTML = '<table><tbody>'
+					+ '<tr data-tabular-row-index="0"><td>a</td></tr>'
+					+ '<tr data-tabular-row-index="1"><td>b</td></tr>'
+					+ '<tr data-tabular-row-index="2"><td>c</td></tr>'
+					+ '<tr data-tabular-row-index="3"><td>d</td></tr>'
+					+ '<tr data-tabular-row-index="4"><td>e</td></tr>'
+					+ '</tbody></table>';
+				window.document.body.appendChild(tmpContainer);
+				try
+				{
+					// Fire the marshal-to-form lifecycle, the same hook a real reload runs through.
+					tmpLayout.onDataMarshalToForm(tmpView, tmpGroup);
+
+					let tmpRows = tmpContainer.querySelectorAll('tr[data-tabular-row-index]');
+					Expect(tmpRows[0].classList.contains('pict-tabular-row-highlight')).to.equal(true, 'row 0 highlighted from persisted selection');
+					Expect(tmpRows[1].classList.contains('pict-tabular-row-highlight')).to.equal(false, 'row 1 not selected, no highlight');
+					Expect(tmpRows[2].classList.contains('pict-tabular-row-highlight')).to.equal(true, 'row 2 highlighted from persisted selection');
+					Expect(tmpRows[3].classList.contains('pict-tabular-row-highlight')).to.equal(false, 'row 3 not selected, no highlight');
+					Expect(tmpRows[4].classList.contains('pict-tabular-row-highlight')).to.equal(false, 'row 4 not selected, no highlight');
+				}
+				finally
+				{
+					window.document.body.removeChild(tmpContainer);
+				}
+			}, fDone);
+		});
+
+		test('Pre-seeded column selection re-applies the highlight class on marshal (reload case)', (fDone) =>
+		{
+			let App = makeApplication(
+				{
+					Hash: 'Students',
+					Layout: 'Tabular',
+					RecordSetAddress: 'Students',
+					RecordManifest: 'StudentEditor',
+					ColumnSelection: true
+				},
+				{ Students_ColumnSelection: [ false, true ] });
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpLayout = _Pict.providers['Pict-Layout-Tabular'];
+
+				let tmpContainer = window.document.createElement('div');
+				tmpContainer.id = `GROUP-${tmpView.formID}-Students`;
+				tmpContainer.innerHTML = '<table>'
+					+ '<thead><tr><th data-tabular-column-index="0">H0</th><th data-tabular-column-index="1">H1</th></tr></thead>'
+					+ '<tbody>'
+					+ '<tr data-tabular-row-index="0"><td data-tabular-column-index="0">a</td><td data-tabular-column-index="1">b</td></tr>'
+					+ '<tr data-tabular-row-index="1"><td data-tabular-column-index="0">c</td><td data-tabular-column-index="1">d</td></tr>'
+					+ '</tbody></table>';
+				window.document.body.appendChild(tmpContainer);
+				try
+				{
+					tmpLayout.onDataMarshalToForm(tmpView, tmpGroup);
+
+					let tmpColumn0 = tmpContainer.querySelectorAll('[data-tabular-column-index="0"]');
+					let tmpColumn1 = tmpContainer.querySelectorAll('[data-tabular-column-index="1"]');
+					for (let i = 0; i < tmpColumn0.length; i++)
+					{
+						Expect(tmpColumn0[i].classList.contains('pict-tabular-column-highlight')).to.equal(false, 'column 0 not selected, no highlight');
+					}
+					for (let i = 0; i < tmpColumn1.length; i++)
+					{
+						Expect(tmpColumn1[i].classList.contains('pict-tabular-column-highlight')).to.equal(true, 'column 1 highlighted from persisted selection');
+					}
+				}
+				finally
+				{
+					window.document.body.removeChild(tmpContainer);
+				}
+			}, fDone);
+		});
+
+		test('onGroupLayoutInitialize re-applies row highlights so re-renders without a marshal still restore state', (fDone) =>
+		{
+			// The form-view onAfterRender hook calls runLayoutProviderFunctions('onGroupLayoutInitialize').
+			// A render path that does NOT subsequently trigger onDataMarshalToForm (e.g. when a parent
+			// re-renders the section after data is already in AppData) would otherwise leave the
+			// table without highlights even though the checkbox `checked` attributes are baked in.
+			let App = makeApplication(
+				{
+					Hash: 'Students',
+					Layout: 'Tabular',
+					RecordSetAddress: 'Students',
+					RecordManifest: 'StudentEditor',
+					RowSelection: true
+				},
+				{ Students_RowSelection: [ false, true, false ] });
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpLayout = _Pict.providers['Pict-Layout-Tabular'];
+
+				let tmpContainer = window.document.createElement('div');
+				tmpContainer.id = `GROUP-${tmpView.formID}-Students`;
+				tmpContainer.innerHTML = '<table><tbody>'
+					+ '<tr data-tabular-row-index="0"><td>a</td></tr>'
+					+ '<tr data-tabular-row-index="1"><td>b</td></tr>'
+					+ '<tr data-tabular-row-index="2"><td>c</td></tr>'
+					+ '</tbody></table>';
+				window.document.body.appendChild(tmpContainer);
+				try
+				{
+					Expect(tmpLayout.onGroupLayoutInitialize).to.be.a('function', 'tabular layout exposes onGroupLayoutInitialize so post-render reapply runs');
+					tmpLayout.onGroupLayoutInitialize(tmpView, tmpGroup);
+
+					let tmpRows = tmpContainer.querySelectorAll('tr[data-tabular-row-index]');
+					Expect(tmpRows[0].classList.contains('pict-tabular-row-highlight')).to.equal(false, 'row 0 not selected, no highlight after layout init');
+					Expect(tmpRows[1].classList.contains('pict-tabular-row-highlight')).to.equal(true, 'row 1 highlighted from persisted selection after layout init');
+					Expect(tmpRows[2].classList.contains('pict-tabular-row-highlight')).to.equal(false, 'row 2 not selected, no highlight after layout init');
+				}
+				finally
+				{
+					window.document.body.removeChild(tmpContainer);
+				}
+			}, fDone);
+		});
+
+		test('runLayoutProviderFunctions dispatches per-group attributes (not always element[0])', (fDone) =>
+		{
+			// Regression for an indexing bug where the loop body in
+			// Pict-View-DynamicForm.runLayoutProviderFunctions read
+			// `tmpLayoutProviders[0]` instead of `tmpLayoutProviders[i]`.
+			// Symptom: every iteration looked like it was for group 0, so the
+			// transaction-tracking dedup at the bottom of the loop treated every
+			// iteration as the same event and skipped all but the first one.
+			// Net effect: only the first group per section ever got its
+			// per-group lifecycle hooks (onDataMarshalToForm, onGroupLayoutInitialize, ...).
+			//
+			// The test builds a section with three tabular groups, plants the
+			// matching `[data-i-pictdynamiclayout="true"]` placeholder DOM, and
+			// asserts that runLayoutProviderFunctions reaches each group exactly once
+			// with the correct group hash.
+			let App = makeApplication([
+				{ Hash: 'GroupA', Layout: 'Tabular', RecordSetAddress: 'Students', RecordManifest: 'StudentEditor' },
+				{ Hash: 'GroupB', Layout: 'Tabular', RecordSetAddress: 'Students', RecordManifest: 'StudentEditor' },
+				{ Hash: 'GroupC', Layout: 'Tabular', RecordSetAddress: 'Students', RecordManifest: 'StudentEditor' }
+			]);
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpLayout = _Pict.providers['Pict-Layout-Tabular'];
+
+				let tmpRoot = window.document.createElement('div');
+				tmpRoot.id = tmpView.sectionDefinition.DefaultDestinationAddress.replace(/^#/, '');
+				tmpRoot.innerHTML =
+					'<div data-i-pictdynamiclayout="true" data-i-pictgroupindex="0" data-i-pictlayout="Tabular" id="layout-0"></div>'
+					+ '<div data-i-pictdynamiclayout="true" data-i-pictgroupindex="1" data-i-pictlayout="Tabular" id="layout-1"></div>'
+					+ '<div data-i-pictdynamiclayout="true" data-i-pictgroupindex="2" data-i-pictlayout="Tabular" id="layout-2"></div>';
+				window.document.body.appendChild(tmpRoot);
+
+				let tmpSeenGroupHashes = [];
+				let tmpOriginalHook = tmpLayout.onGroupLayoutInitialize;
+				tmpLayout.onGroupLayoutInitialize = function (pView, pGroup)
+				{
+					tmpSeenGroupHashes.push(pGroup && pGroup.Hash);
+					return true;
+				};
+				try
+				{
+					tmpView.runLayoutProviderFunctions('onGroupLayoutInitialize');
+
+					Expect(tmpSeenGroupHashes).to.deep.equal(['GroupA', 'GroupB', 'GroupC'], 'hook fires once per group, in DOM order, with the per-element group hash');
+				}
+				finally
+				{
+					tmpLayout.onGroupLayoutInitialize = tmpOriginalHook;
+					window.document.body.removeChild(tmpRoot);
+				}
+			}, fDone);
+		});
+
+		test('onGroupLayoutInitialize re-applies column highlights too', (fDone) =>
+		{
+			let App = makeApplication(
+				{
+					Hash: 'Students',
+					Layout: 'Tabular',
+					RecordSetAddress: 'Students',
+					RecordManifest: 'StudentEditor',
+					ColumnSelection: true
+				},
+				{ Students_ColumnSelection: [ true, false ] });
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpLayout = _Pict.providers['Pict-Layout-Tabular'];
+
+				let tmpContainer = window.document.createElement('div');
+				tmpContainer.id = `GROUP-${tmpView.formID}-Students`;
+				tmpContainer.innerHTML = '<table>'
+					+ '<thead><tr><th data-tabular-column-index="0">H0</th><th data-tabular-column-index="1">H1</th></tr></thead>'
+					+ '<tbody>'
+					+ '<tr data-tabular-row-index="0"><td data-tabular-column-index="0">a</td><td data-tabular-column-index="1">b</td></tr>'
+					+ '</tbody></table>';
+				window.document.body.appendChild(tmpContainer);
+				try
+				{
+					tmpLayout.onGroupLayoutInitialize(tmpView, tmpGroup);
+
+					let tmpColumn0 = tmpContainer.querySelectorAll('[data-tabular-column-index="0"]');
+					let tmpColumn1 = tmpContainer.querySelectorAll('[data-tabular-column-index="1"]');
+					for (let i = 0; i < tmpColumn0.length; i++)
+					{
+						Expect(tmpColumn0[i].classList.contains('pict-tabular-column-highlight')).to.equal(true, 'column 0 highlighted from persisted selection');
+					}
+					for (let i = 0; i < tmpColumn1.length; i++)
+					{
+						Expect(tmpColumn1[i].classList.contains('pict-tabular-column-highlight')).to.equal(false, 'column 1 not selected, no highlight');
+					}
+				}
+				finally
+				{
+					window.document.body.removeChild(tmpContainer);
+				}
 			}, fDone);
 		});
 	});

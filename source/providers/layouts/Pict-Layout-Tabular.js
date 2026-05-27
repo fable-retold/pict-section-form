@@ -973,6 +973,30 @@ class TabularLayout extends libPictSectionGroupLayout
 	}
 
 	/**
+	 * Called after the group layout renders. Restores selection highlight
+	 * classes from the persisted selection arrays so a reload (or any render
+	 * path that does not trigger a subsequent marshal-to-form) shows
+	 * already-selected rows/columns highlighted from the first paint.
+	 *
+	 * The checkbox `checked` attribute is baked into the row HTML at render
+	 * time; the highlight class is not, so the layout-init hook is what
+	 * mirrors that state onto the `<tr>` / cells.
+	 *
+	 * @param {Object} pView
+	 * @param {Object} pGroup
+	 * @returns {boolean}
+	 */
+	onGroupLayoutInitialize(pView, pGroup)
+	{
+		if (!pGroup)
+		{
+			return true;
+		}
+		this._reapplyTabularSelectionHighlights(pView, pGroup);
+		return true;
+	}
+
+	/**
 	 * Called after data is marshaled to the form. Re-runs DynamicColumns
 	 * resolution and row-label clustering so additions/removals of source
 	 * data flow into the rendered table without manual refresh calls.
