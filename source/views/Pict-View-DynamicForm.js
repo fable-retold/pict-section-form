@@ -714,8 +714,8 @@ class PictViewDynamicForm extends libPictViewClass
 		// Slightly more code for getting the active layout providers but provides TRUE DYNAMISM.
 		for (let i = 0; i < tmpLayoutProviders.length; i++)
 		{
-			let tmpGroupIndex = tmpLayoutProviders[0].getAttribute('data-i-pictgroupindex');
-			let tmpLayout = tmpLayoutProviders[0].getAttribute('data-i-pictlayout');
+			let tmpGroupIndex = tmpLayoutProviders[i].getAttribute('data-i-pictgroupindex');
+			let tmpLayout = tmpLayoutProviders[i].getAttribute('data-i-pictlayout');
 
 			if (isNaN(tmpGroupIndex) || (tmpGroupIndex < 0))
 			{

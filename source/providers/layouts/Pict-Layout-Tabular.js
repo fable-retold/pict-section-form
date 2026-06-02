@@ -732,6 +732,25 @@ class TabularLayout extends libPictSectionGroupLayout
 	}
 
 	/**
+	 * Called after the group's layout DOM is rendered (onAfterRender lifecycle).
+	 * Re-applies any persisted selection highlights so they are visible on page
+	 * load even when no marshal has yet been run.
+	 *
+	 * @param {Object} pView
+	 * @param {Object} pGroup
+	 * @returns {boolean}
+	 */
+	onGroupLayoutInitialize(pView, pGroup)
+	{
+		if (!pGroup)
+		{
+			return true;
+		}
+		this._reapplyTabularSelectionHighlights(pView, pGroup);
+		return true;
+	}
+
+	/**
 	 * Generate a group layout template for a single-record dynamically generated group view.
 	 *
 	 * This is the standard name / field entry form that you're used to filling out for addresses

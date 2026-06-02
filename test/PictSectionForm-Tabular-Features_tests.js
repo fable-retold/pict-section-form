@@ -102,6 +102,29 @@ const _SeedAppData =
 	]
 };
 
+function makeMultiGroupApplication(pGroupConfigs, pExtraAppData)
+{
+	class TestApp extends libPictSectionForm.PictFormApplication
+	{
+		set testDone(fDone)  { this._testDone = fDone; }
+		onAfterInitialize()
+		{
+			this.solve();
+			this._testDone && this._testDone();
+		}
+	}
+	let tmpManifest = JSON.parse(JSON.stringify(_BaseManifest));
+	tmpManifest.Sections[0].Groups = pGroupConfigs;
+	TestApp.default_configuration = JSON.parse(JSON.stringify(libPictSectionForm.PictFormApplication.default_configuration));
+	TestApp.default_configuration.pict_configuration =
+	{
+		Product: 'TabularFeaturesTest',
+		DefaultAppData: Object.assign({}, _SeedAppData, pExtraAppData || {}),
+		DefaultFormManifest: tmpManifest
+	};
+	return TestApp;
+}
+
 function makeApplication(pGroupConfig, pExtraAppData)
 {
 	class TestApp extends libPictSectionForm.PictFormApplication
@@ -856,6 +879,201 @@ suite('PictSectionForm Tabular Features', () =>
 				tmpLayout.toggleTabularRowSelection('PictSectionForm-Class', 0, 0, true);
 				Expect(Array.isArray(_Pict.AppData.MyRowPicks)).to.equal(true, 'selection stored at the custom address');
 				Expect(_Pict.AppData.MyRowPicks[0]).to.equal(true);
+			}, fDone);
+		});
+	});
+
+	suite('Bug fix: runLayoutProviderFunctions dispatches to all groups', () =>
+	{
+		test('layout hooks fire for every group index, not only group 0', (fDone) =>
+		{
+			// Two tabular groups in the same section. Before the fix the loop body
+			// always read tmpLayoutProviders[0] so iteration i=1 still called the
+			// hook for group 0 — group 1 was silently skipped.
+			let App = makeMultiGroupApplication([
+				{ Hash: 'Students', Layout: 'Tabular', RecordSetAddress: 'Students', RecordManifest: 'StudentEditor' },
+				{ Hash: 'Grades',   Layout: 'Tabular', RecordSetAddress: 'Grades',   RecordManifest: 'GradeRowEditor' }
+			]);
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+
+				// Build the section container that runLayoutProviderFunctions queries.
+				// The ID is derived from the view's DefaultDestinationAddress (strips leading '#').
+				let tmpSection = window.document.createElement('div');
+				tmpSection.id = tmpView.sectionDefinition.DefaultDestinationAddress.slice(1);
+				[0, 1].forEach((pIdx) =>
+				{
+					let tmpMarker = window.document.createElement('div');
+					tmpMarker.setAttribute('data-i-pictdynamiclayout', 'true');
+					tmpMarker.setAttribute('data-i-pictgroupindex', String(pIdx));
+					tmpMarker.setAttribute('data-i-pictlayout', 'Tabular');
+					tmpSection.appendChild(tmpMarker);
+				});
+				window.document.body.appendChild(tmpSection);
+
+				try
+				{
+					let tmpLayout = _Pict.providers['Pict-Layout-Tabular'];
+					let tmpHitGroupIndices = [];
+					let tmpOriginalInit = tmpLayout.onDataMarshalToForm.bind(tmpLayout);
+					tmpLayout.onDataMarshalToForm = (pView, pGroup) =>
+					{
+						tmpHitGroupIndices.push(pGroup.GroupIndex);
+						return tmpOriginalInit(pView, pGroup);
+					};
+
+					tmpView.runLayoutProviderFunctions('onDataMarshalToForm');
+
+					Expect(tmpHitGroupIndices).to.include(0, 'group 0 hook fired');
+					Expect(tmpHitGroupIndices).to.include(1, 'group 1 hook fired — was silently skipped before the fix');
+					Expect(tmpHitGroupIndices.length).to.equal(2, 'exactly two calls, one per group');
+				}
+				finally
+				{
+					window.document.body.removeChild(tmpSection);
+				}
+			}, fDone);
+		});
+	});
+
+	suite('Bug fix: onGroupLayoutInitialize restores selection highlights on render', () =>
+	{
+		test('row selection highlights are re-applied after a render without a preceding marshal', (fDone) =>
+		{
+			// Seed the selection array: row 1 is selected, row 0 and 2 are not.
+			let App = makeApplication(
+				{ Hash: 'Students', Layout: 'Tabular', RecordSetAddress: 'Students', RecordManifest: 'StudentEditor', RowSelection: true },
+				{ Students_RowSelection: [false, true, false] }
+			);
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView  = _Pict.views['PictSectionForm-Class'];
+
+				// Section container (DefaultDestinationAddress) + layout marker + group div.
+				let tmpSection = window.document.createElement('div');
+				tmpSection.id  = tmpView.sectionDefinition.DefaultDestinationAddress.slice(1);
+
+				let tmpMarker = window.document.createElement('div');
+				tmpMarker.setAttribute('data-i-pictdynamiclayout', 'true');
+				tmpMarker.setAttribute('data-i-pictgroupindex', '0');
+				tmpMarker.setAttribute('data-i-pictlayout', 'Tabular');
+				tmpSection.appendChild(tmpMarker);
+
+				let tmpGroupContainer = window.document.createElement('div');
+				tmpGroupContainer.id = `GROUP-${tmpView.formID}-Students`;
+
+				let tmpTable = window.document.createElement('table');
+				let tmpTbody = window.document.createElement('tbody');
+				['Alice', 'Bob', 'Carol'].forEach((pName, pIdx) =>
+				{
+					let tmpTr = window.document.createElement('tr');
+					tmpTr.setAttribute('data-tabular-row-index', String(pIdx));
+					let tmpTd = window.document.createElement('td');
+					tmpTd.setAttribute('data-tabular-column-index', '0');
+					tmpTd.textContent = pName;
+					tmpTr.appendChild(tmpTd);
+					tmpTbody.appendChild(tmpTr);
+				});
+				tmpTable.appendChild(tmpTbody);
+				tmpGroupContainer.appendChild(tmpTable);
+				tmpSection.appendChild(tmpGroupContainer);
+				window.document.body.appendChild(tmpSection);
+
+				try
+				{
+					// onAfterRender triggers runLayoutProviderFunctions('onGroupLayoutInitialize').
+					tmpView.onAfterRender();
+
+					let tmpRow0 = tmpGroupContainer.querySelector('tr[data-tabular-row-index="0"]');
+					let tmpRow1 = tmpGroupContainer.querySelector('tr[data-tabular-row-index="1"]');
+					let tmpRow2 = tmpGroupContainer.querySelector('tr[data-tabular-row-index="2"]');
+
+					Expect(tmpRow0.classList.contains('pict-tabular-row-highlight')).to.equal(false, 'row 0 not selected — no highlight');
+					Expect(tmpRow1.classList.contains('pict-tabular-row-highlight')).to.equal(true,  'row 1 selected — highlight restored without a preceding marshal');
+					Expect(tmpRow2.classList.contains('pict-tabular-row-highlight')).to.equal(false, 'row 2 not selected — no highlight');
+				}
+				finally
+				{
+					window.document.body.removeChild(tmpSection);
+				}
+			}, fDone);
+		});
+
+		test('column selection highlights are re-applied after a render without a preceding marshal', (fDone) =>
+		{
+			// Seed: column 1 is selected, column 0 is not.
+			let App = makeApplication(
+				{ Hash: 'Students', Layout: 'Tabular', RecordSetAddress: 'Students', RecordManifest: 'StudentEditor', ColumnSelection: true },
+				{ Students_ColumnSelection: [false, true] }
+			);
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+
+				let tmpSection = window.document.createElement('div');
+				tmpSection.id  = tmpView.sectionDefinition.DefaultDestinationAddress.slice(1);
+
+				let tmpMarker = window.document.createElement('div');
+				tmpMarker.setAttribute('data-i-pictdynamiclayout', 'true');
+				tmpMarker.setAttribute('data-i-pictgroupindex', '0');
+				tmpMarker.setAttribute('data-i-pictlayout', 'Tabular');
+				tmpSection.appendChild(tmpMarker);
+
+				let tmpGroupContainer = window.document.createElement('div');
+				tmpGroupContainer.id = `GROUP-${tmpView.formID}-Students`;
+
+				let tmpTable = window.document.createElement('table');
+
+				let tmpThead = window.document.createElement('thead');
+				let tmpHeaderRow = window.document.createElement('tr');
+				['Section', 'Student'].forEach((pLabel, pColIdx) =>
+				{
+					let tmpTh = window.document.createElement('th');
+					tmpTh.setAttribute('data-tabular-column-index', String(pColIdx));
+					tmpTh.textContent = pLabel;
+					tmpHeaderRow.appendChild(tmpTh);
+				});
+				tmpThead.appendChild(tmpHeaderRow);
+
+				let tmpTbody = window.document.createElement('tbody');
+				let tmpDataRow = window.document.createElement('tr');
+				tmpDataRow.setAttribute('data-tabular-row-index', '0');
+				['A', 'Alice'].forEach((pVal, pColIdx) =>
+				{
+					let tmpTd = window.document.createElement('td');
+					tmpTd.setAttribute('data-tabular-column-index', String(pColIdx));
+					tmpTd.textContent = pVal;
+					tmpDataRow.appendChild(tmpTd);
+				});
+				tmpTbody.appendChild(tmpDataRow);
+
+				tmpTable.appendChild(tmpThead);
+				tmpTable.appendChild(tmpTbody);
+				tmpGroupContainer.appendChild(tmpTable);
+				tmpSection.appendChild(tmpGroupContainer);
+				window.document.body.appendChild(tmpSection);
+
+				try
+				{
+					tmpView.onAfterRender();
+
+					let tmpCol0 = tmpGroupContainer.querySelectorAll('[data-tabular-column-index="0"]');
+					let tmpCol1 = tmpGroupContainer.querySelectorAll('[data-tabular-column-index="1"]');
+
+					for (let i = 0; i < tmpCol0.length; i++)
+					{
+						Expect(tmpCol0[i].classList.contains('pict-tabular-column-highlight')).to.equal(false, `column 0 cell ${i} not selected — no highlight`);
+					}
+					for (let i = 0; i < tmpCol1.length; i++)
+					{
+						Expect(tmpCol1[i].classList.contains('pict-tabular-column-highlight')).to.equal(true, `column 1 cell ${i} selected — highlight restored without a preceding marshal`);
+					}
+				}
+				finally
+				{
+					window.document.body.removeChild(tmpSection);
+				}
 			}, fDone);
 		});
 	});
