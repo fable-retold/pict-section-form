@@ -17,6 +17,7 @@ declare class PictFormMetacontroller extends libPictViewClass {
     manifest: any;
     AutoSolveOnFirstRender: boolean;
     FirstRenderCompleted: boolean;
+    comprehensionDestinationAddress: any;
     SupportViewPrototypes: {
         LifecycleVisualization: typeof import("./support/Pict-View-PSF-LifeCycle-Visualization.js");
         DebugViewer: typeof import("./support/Pict-View-PSF-DebugViewer.js");
@@ -194,6 +195,27 @@ declare class PictFormMetacontroller extends libPictViewClass {
      */
     getSectionDefinition(pSectionObject: object): object | boolean;
     getSectionViewFromHash(pSectionHash: any): any;
+    /**
+     * Marshal one or more section views' data to the DOM.
+     *
+     * For values written outside the normal solve -> marshal cycle (e.g. a trigger group's `PostSolvers`
+     * running in an EntityBundleRequest transaction-complete callback). The global equivalent is
+     * `marshalToView()`; this is the section-scoped, cheaper option.
+     *
+     * @param {string|string[]} pSectionHashes - a section hash, or an array of section hashes
+     * @returns {void}
+     */
+    marshalSectionToView(pSectionHashes: string | string[]): void;
+    /**
+     * Marshal one or more inputs' data to the DOM, wherever they live (finds the owning section view).
+     *
+     * The single-input equivalent of {@link marshalSectionToView}; use it when only specific fields
+     * changed (e.g. a trigger group that computed one read-only attribute).
+     *
+     * @param {string|string[]} pInputHashes - an input hash, or an array of input hashes
+     * @returns {void}
+     */
+    marshalInputToView(pInputHashes: string | string[]): void;
     /**
      * Clears out the manifest description set on the meta controller.
      */

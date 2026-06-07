@@ -54,8 +54,25 @@ const _DefaultProviderConfiguration =
 	AutoSolveWithApp: false
 };
 
+/**
+ * @typedef {Object} Instance
+ * @property {string} mode - 'edit' or 'view'
+ * @property {string} slotID - The HTML ID of the content slot for this input
+ * @property {string} lastValue - The last known value (SVG string)
+ * @property {Object} viewInstance - The editor view instance (if in edit mode)
+ * @property {string} viewHash - The hash of the editor view (if in edit mode)
+ * @property {Object} input - The input definition object
+ */
+
 class PictInputDiagram extends libPictSectionInputExtension
 {
+	/**
+	 * Creates an instance of the PictInputExtensionProvider class.
+	 *
+	 * @param {import('pict')} pFable - The Pict instance.
+	 * @param {Record<string, any>} [pOptions] - The options for the provider.
+	 * @param {string} [pServiceHash] - The service hash for the provider.
+	 */
 	constructor(pFable, pOptions, pServiceHash)
 	{
 		let tmpOptions = Object.assign({}, JSON.parse(JSON.stringify(_DefaultProviderConfiguration)), pOptions);
@@ -65,6 +82,7 @@ class PictInputDiagram extends libPictSectionInputExtension
 		/** @type {any}            */ this.log;
 
 		// inputHash → { mode, slotID, lastValue (SVG string), viewInstance?, viewHash?, input }
+		/** @type {Record<String, Instance>} */
 		this._instances = {};
 
 		// Register the scoped CSS.
@@ -78,16 +96,36 @@ class PictInputDiagram extends libPictSectionInputExtension
 	// Helpers
 	// ----------------------------------------------------------------------------
 
+	/**
+	 * @param {string} pInputHTMLID - The RawHTMLID of the input.
+	 * @returns {string} The HTML ID selector for the content display slot corresponding to the input.
+	 */
 	getContentDisplayHTMLID(pInputHTMLID)
 	{
 		return `#DISPLAY-FOR-${pInputHTMLID}`;
 	}
 
+	/**
+	 * @param {string} pInputHTMLID - The RawHTMLID of the input.
+	 * @param {number} pRowIndex - The row index for tabular inputs.
+	 * @returns {string} The HTML ID selector for the content display slot corresponding to the tabular input.
+	 */
 	getTabularContentDisplayInputID(pInputHTMLID, pRowIndex)
 	{
 		return `#DISPLAY-FOR-TABULAR-${pInputHTMLID}-${pRowIndex}`;
 	}
 
+	/**
+	 * Resolve the value to use for display/editing, following this precedence:
+	 * 1. The provided pValue (if a non-empty string)
+	 * 2. The input's Content property (if a non-empty string)
+	 * 3. The input's Default property (if a non-empty string)
+	 * 4. An empty string if none of the above are valid
+	 *
+	 * @param {Object} pInput - The input definition object.
+	 * @param {any} pValue - The value provided for the input.
+	 * @returns {string} The resolved value to use for display/editing.
+	 */
 	_resolveValue(pInput, pValue)
 	{
 		if (typeof pValue === 'string' && pValue.length > 0) return pValue;
@@ -96,11 +134,20 @@ class PictInputDiagram extends libPictSectionInputExtension
 		return '';
 	}
 
+	/**
+	 * @param {any} pValue - The value to check.
+	 * @return {boolean} True if the value is a string that appears to contain an <svg> element, false otherwise.
+	 */
 	_isLikelySvg(pValue)
 	{
 		return (typeof pValue === 'string') && /<svg[\s>]/i.test(pValue);
 	}
 
+	/**
+	 * @param {string} pSlotID - The HTML ID of the content slot to assign.
+	 * @param {string} pHTML - The HTML string to assign to the slot.
+	 * @returns {boolean} True if the assignment was successful, false otherwise.
+	 */
 	_assignSlotContent(pSlotID, pHTML)
 	{
 		if (this.pict && this.pict.ContentAssignment &&
@@ -112,6 +159,11 @@ class PictInputDiagram extends libPictSectionInputExtension
 		return false;
 	}
 
+	/**
+	 * @param {string} pInputHTMLID - The RawHTMLID of the input whose hidden value field should be updated.
+	 * @param {string} pValue - The SVG string to set as the value of the hidden input field.
+	 * @returns {boolean} True if the value was successfully written and a change event dispatched, false otherwise.
+	 */
 	_writeHiddenInputValue(pInputHTMLID, pValue)
 	{
 		let tmpEl = (typeof document !== 'undefined') ? document.getElementById(pInputHTMLID) : null;
@@ -131,6 +183,9 @@ class PictInputDiagram extends libPictSectionInputExtension
 	/**
 	 * Wrap an SVG string in a thin <div> for the view-mode slot. If the value
 	 * is empty or not an SVG, show an "(empty)" placeholder.
+	 *
+	 * @param {string} pValue - The SVG string to wrap for display.
+	 * @returns {string} The HTML string to assign to the view slot.
 	 */
 	_buildViewHTML(pValue)
 	{
@@ -141,6 +196,10 @@ class PictInputDiagram extends libPictSectionInputExtension
 		return `<div class="pict-section-form-diagram-view is-empty">(empty diagram)</div>`;
 	}
 
+	/**
+	 * @param {Object} pInput - The input definition object.
+	 * @param {string} pMode - The mode to set ('edit' or 'view').
+	 */
 	_setSlotModeClass(pInput, pMode)
 	{
 		if (typeof document === 'undefined') return;
@@ -494,13 +553,41 @@ class PictInputDiagram extends libPictSectionInputExtension
 		return super.onInputInitialize(pView, pGroup, pRow, pInput, pValue, pHTMLSelector, pTransactionGUID);
 	}
 
+	/**
+	 * A tabular input has been initialized (rendered into the DOM)
+	 *
+	 * Called when an input has this Provider hash in its 'Providers' array.
+	 *
+	 * @param {Object} pView - The view object.
+	 * @param {Object} pGroup - The group definition object.
+	 * @param {Object} pInput - The input object.
+	 * @param {any} pValue - The value of the input object
+	 * @param {string} pHTMLSelector - The HTML selector for the input object (it will return an array).
+	 * @param {string} pTransactionGUID - The transaction GUID for the event dispatch.
+	 * @param {number} pRowIndex - The row index of the tabular data
+	 *
+	 * @return {boolean}
+	 */
 	onInputInitializeTabular(pView, pGroup, pInput, pValue, pHTMLSelector, pRowIndex, pTransactionGUID)
 	{
+		super.onInputInitializeTabular(pView, pGroup, pInput, pValue, pHTMLSelector, pRowIndex, pTransactionGUID);
 		let tmpErr = new Error('Diagram InputType is not supported inside Tabular rows in Phase 1.');
 		if (this.log) this.log.warn('[Pict-Input-Diagram] tabular not supported', { inputHash: pInput && pInput.Hash });
 		throw tmpErr;
 	}
 
+	/**
+	 * Fires when data is marshaled to the form for this input.
+	 *
+	 * @param {Object} pView - The view object.
+	 * @param {Object} pGroup - The group definition object.
+	 * @param {number} pRow - The Row index.
+	 * @param {Object} pInput - The input object.
+	 * @param {any} pValue - The value to marshal.
+	 * @param {string} pHTMLSelector - The HTML selector.
+	 * @param {string} pTransactionGUID - The transaction GUID for the event dispatch.
+	 * @returns {boolean} - Returns true if the data was successfully marshaled to the form.
+	 */
 	onDataMarshalToForm(pView, pGroup, pRow, pInput, pValue, pHTMLSelector, pTransactionGUID)
 	{
 		let tmpInst = this._instances[pInput.Hash];

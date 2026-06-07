@@ -1194,6 +1194,65 @@ class PictFormMetacontroller extends libPictViewClass
 	}
 
 	/**
+	 * Marshal one or more section views' data to the DOM.
+	 *
+	 * For values written outside the normal solve -> marshal cycle (e.g. a trigger group's `PostSolvers`
+	 * running in an EntityBundleRequest transaction-complete callback). The global equivalent is
+	 * `marshalToView()`; this is the section-scoped, cheaper option.
+	 *
+	 * @param {string|string[]} pSectionHashes - a section hash, or an array of section hashes
+	 * @returns {void}
+	 */
+	marshalSectionToView(pSectionHashes)
+	{
+		const tmpSectionHashes = (Array.isArray(pSectionHashes) ? pSectionHashes : [ pSectionHashes ]).filter((pHash) => typeof pHash === 'string' && pHash.length > 0);
+		for (const tmpSectionHash of tmpSectionHashes)
+		{
+			const tmpSectionView = this.getSectionViewFromHash(tmpSectionHash);
+			if (tmpSectionView)
+			{
+				tmpSectionView.marshalToView();
+			}
+		}
+	}
+
+	/**
+	 * Marshal one or more inputs' data to the DOM, wherever they live (finds the owning section view).
+	 *
+	 * The single-input equivalent of {@link marshalSectionToView}; use it when only specific fields
+	 * changed (e.g. a trigger group that computed one read-only attribute).
+	 *
+	 * @param {string|string[]} pInputHashes - an input hash, or an array of input hashes
+	 * @returns {void}
+	 */
+	marshalInputToView(pInputHashes)
+	{
+		const tmpInputHashes = (Array.isArray(pInputHashes) ? pInputHashes : [ pInputHashes ]).filter((pHash) => typeof pHash === 'string' && pHash.length > 0);
+		if (tmpInputHashes.length < 1)
+		{
+			return;
+		}
+		const tmpSectionViews = this.filterViews();
+		for (const tmpInputHash of tmpInputHashes)
+		{
+			for (let i = 0; i < tmpSectionViews.length; i++)
+			{
+				const tmpSectionView = tmpSectionViews[i];
+				if (tmpSectionView === this || typeof tmpSectionView.getInputFromHash !== 'function')
+				{
+					continue;
+				}
+				const tmpInput = tmpSectionView.getInputFromHash(tmpInputHash);
+				if (tmpInput)
+				{
+					tmpSectionView.manualMarshalDataToViewByInput(tmpInput);
+					break;
+				}
+			}
+		}
+	}
+
+	/**
 	 * Clears out the manifest description set on the meta controller.
 	 */
 	clearManifestDescription()

@@ -33,6 +33,35 @@ declare class ManifestFactory extends libFableServiceProviderBase {
      */
     initializeFormGroups(pView: any): void;
     /**
+     * Resolve a single template string against a record context.
+     *
+     * @param {string} pTemplate - The template string to resolve.
+     * @param {Object} pRecord - The record context to resolve against.
+     * @returns {string} The resolved string, or '' on failure.
+     */
+    _parseDynamicColumnTemplate(pTemplate: string, pRecord: any): string;
+    /**
+     * Resolve a Tabular Group's DynamicColumns generators into descriptors on its supportingManifest.
+     *
+     * NON-DESTRUCTIVE: descriptor pruning is structural only -- row record data at
+     * removed InformaryDataAddresses is never touched, so hidden data persists for
+     * later restoration if the source row reappears.
+     *
+     * InformaryDataAddressTemplate is resolved ONCE at descriptor generation time
+     * (Informary itself is a pure string concat at marshal time -- see
+     * Pict-Provider-Informary.getComposedContainerAddress).
+     *
+     * @param {Object} pView - The view containing the group.
+     * @param {Object} pGroup - The group object (must already have supportingManifest).
+     * @returns {{added: Array<string>, removed: Array<string>, unchanged: Array<string>, changed: boolean}}
+     */
+    _resolveDynamicColumns(pView: any, pGroup: any): {
+        added: Array<string>;
+        removed: Array<string>;
+        unchanged: Array<string>;
+        changed: boolean;
+    };
+    /**
      * Adds a manifest descriptor to the manifest.
      *
      * @param {Object} pManifestDescriptor - The manifest descriptor to add.

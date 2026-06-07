@@ -15,6 +15,10 @@ declare class PictDynamicFormsSolverBehaviors extends libPictProvider {
     /** @type {string} */
     cssHideSectionClass: string;
     cssHideGroupClass: string;
+    /** @type {string} */
+    cssTabularRowHighlightClass: string;
+    /** @type {string} */
+    cssTabularColumnHighlightClass: string;
     cssSnippet: string;
     solverOrdinalMap: {};
     setCSSSnippets(pCSSHideClass: any, pCSSSnippet: any): void;
@@ -151,6 +155,82 @@ declare class PictDynamicFormsSolverBehaviors extends libPictProvider {
      */
     colorElementBackground(pElementSet: Array<HTMLElement>, pColor: string, pCSSSelector?: string): boolean;
     /**
+     * Interprets a solver-supplied 1/0 (or true/false) flag.
+     *
+     * Solver numbers arrive as arbitrary-precision strings, so a plain truthiness
+     * check would treat the string "0" as true. This normalizes the common
+     * "off" representations to false and everything else to true.
+     *
+     * @param {any} pFlag
+     * @returns {boolean}
+     */
+    isSolverFlagEnabled(pFlag: any): boolean;
+    /**
+     * Resolves the DOM selector for a tabular group's container div.
+     *
+     * The tabular group div carries `id="GROUP-<formID>-<groupHash>"` (the same
+     * convention the non-tabular group layout uses), so highlight/color solvers
+     * can scope their cell queries to a single group.
+     *
+     * @param {string} pSectionHash - The hash of the section containing the group.
+     * @param {string} pGroupHash - The hash of the tabular group.
+     * @returns {string|null} A CSS selector for the group container, or null if unresolved.
+     */
+    getTabularGroupSelector(pSectionHash: string, pGroupHash: string): string | null;
+    /**
+     * Adds (pApplyFlag truthy) or removes (pApplyFlag falsy) a highlight class on
+     * every cell of a tabular row -- the row labels, editing controls and data
+     * cells all get the class because it lands on the row's `<tr>`.
+     *
+     * @param {string} pSectionHash - The hash of the section containing the tabular group.
+     * @param {string} pGroupHash - The hash of the tabular group.
+     * @param {number|string} pRowIndex - The zero-based row index.
+     * @param {number|string|boolean} pApplyFlag - 1/0 (or true/false) -- add or remove the class.
+     * @param {string} [pHighlightClass] - Optional override for the class name.
+     * @returns {boolean}
+     */
+    highlightTabularRow(pSectionHash: string, pGroupHash: string, pRowIndex: number | string, pApplyFlag: number | string | boolean, pHighlightClass?: string): boolean;
+    /**
+     * Adds (pApplyFlag truthy) or removes (pApplyFlag falsy) a highlight class on
+     * every cell of a tabular column -- both the `<th>` header cell and every
+     * `<td>` data cell that carries the matching `data-tabular-column-index`.
+     *
+     * @param {string} pSectionHash - The hash of the section containing the tabular group.
+     * @param {string} pGroupHash - The hash of the tabular group.
+     * @param {number|string} pColumnIndex - The column's input index (descriptor InputIndex).
+     * @param {number|string|boolean} pApplyFlag - 1/0 (or true/false) -- add or remove the class.
+     * @param {string} [pHighlightClass] - Optional override for the class name.
+     * @returns {boolean}
+     */
+    highlightTabularColumn(pSectionHash: string, pGroupHash: string, pColumnIndex: number | string, pApplyFlag: number | string | boolean, pHighlightClass?: string): boolean;
+    /**
+     * Sets (pApplyFlag truthy) or clears (pApplyFlag falsy) an inline background
+     * color on every data cell of a tabular row.
+     *
+     * The color is applied with `important` priority so it beats both host
+     * table-striping CSS and the highlight classes.
+     *
+     * @param {string} pSectionHash - The hash of the section containing the tabular group.
+     * @param {string} pGroupHash - The hash of the tabular group.
+     * @param {number|string} pRowIndex - The zero-based row index.
+     * @param {string} pColor - The HTML color to apply (e.g. #FF0000).
+     * @param {number|string|boolean} pApplyFlag - 1/0 (or true/false) -- apply or clear the color.
+     * @returns {boolean}
+     */
+    colorTabularRow(pSectionHash: string, pGroupHash: string, pRowIndex: number | string, pColor: string, pApplyFlag: number | string | boolean): boolean;
+    /**
+     * Sets (pApplyFlag truthy) or clears (pApplyFlag falsy) an inline background
+     * color on every cell of a tabular column -- header `<th>` plus all data `<td>`.
+     *
+     * @param {string} pSectionHash - The hash of the section containing the tabular group.
+     * @param {string} pGroupHash - The hash of the tabular group.
+     * @param {number|string} pColumnIndex - The column's input index (descriptor InputIndex).
+     * @param {string} pColor - The HTML color to apply (e.g. #FF0000).
+     * @param {number|string|boolean} pApplyFlag - 1/0 (or true/false) -- apply or clear the color.
+     * @returns {boolean}
+     */
+    colorTabularColumn(pSectionHash: string, pGroupHash: string, pColumnIndex: number | string, pColor: string, pApplyFlag: number | string | boolean): boolean;
+    /**
      * Gets a value from the global form data by hash, falling back to address resolution
      * using the global manyfest from the metacontroller.
      *
@@ -191,6 +271,41 @@ declare class PictDynamicFormsSolverBehaviors extends libPictProvider {
      */
     getSectionTabularFormData(pSectionHash: string, pGroupHash: string, pRowIndex: number | string, pHashOrAddress: string): any;
     logValues(...args: any[]): any;
+    /**
+     * Resolves the comprehension destination object, creating intermediate objects along the configured
+     * address if they don't exist.  The address is read from
+     * `PictFormMetacontroller.comprehensionDestinationAddress` (default `AppData.FormEntityComprehensions`)
+     * and resolved against the pict instance, so callers can target any subtree (`AppData.*`, `Bundle.*`, ...).
+     *
+     * @returns {Record<string, any>|null} The destination object (mutable), or null if the address resolves
+     * to a non-object value the function can't safely write into (e.g. a number).
+     */
+    resolveComprehensionDestination(): Record<string, any> | null;
+    /**
+     * Writes a single property/value into the configured comprehension destination, nested as
+     * `Context -> Entity -> GUID -> Property = Value`.
+     *
+     * `Context` is a manyfest address (dot-separated) so dotted contexts like
+     * `OnApprovalAction.Approve` produce nested context branches.  `Entity`, `GUID`, and `Property`
+     * are treated as opaque property names -- dots in them are NOT interpreted as nesting (so an
+     * entity GUID like `0x73278432987` lands as a single key).
+     *
+     * Successive calls to the same `(Context, Entity, GUID)` accumulate properties on the same
+     * record.  Successive calls to the same `(Context, Entity, GUID, Property)` overwrite.
+     *
+     * The destination address is configured on the metacontroller via
+     * `comprehensionDestinationAddress` (default `AppData.FormEntityComprehensions`) -- see
+     * `docs/Comprehensions.md`.
+     *
+     * @param {string} pContext - The comprehension context address (e.g. `"OnSave"`, `"OnApprovalAction.Approve"`).
+     * @param {string} pEntity - The entity name (e.g. `"Book"`).
+     * @param {string} pGUID - The external GUID for the record (e.g. `"0x73278432987"`).
+     * @param {string} pProperty - The property to set on the record (e.g. `"Title"`).
+     * @param {any} pValue - The value to write.
+     *
+     * @returns {any} `pValue` on success, `undefined` if the call was a no-op (invalid args / unwritable destination).
+     */
+    addComprehensionEntity(pContext: string, pEntity: string, pGUID: string, pProperty: string, pValue: any): any;
 }
 declare namespace PictDynamicFormsSolverBehaviors {
     export { _DefaultProviderConfiguration as default_configuration };

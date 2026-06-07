@@ -140,6 +140,16 @@ class CustomInputHandler extends libPictSectionInputExtension
 						if (Array.isArray(tmpGroupConfig.PostSolvers))
 						{
 							this.pict.providers.DynamicSolver.executeSolvers(pView, tmpGroupConfig.PostSolvers, `AutofillTriggerGroup hash ${tmpGroupConfig.TriggerGroupHash} post-trigger`);
+							const tmpMarshalScope = tmpGroupConfig.MarshalOnComplete;
+							if (tmpMarshalScope === true)
+							{
+								this.pict.views.PictFormMetacontroller.marshalToView();
+							}
+							else if (tmpMarshalScope)
+							{
+								this.pict.views.PictFormMetacontroller.marshalSectionToView(tmpMarshalScope.Section);
+								this.pict.views.PictFormMetacontroller.marshalInputToView(tmpMarshalScope.Input);
+							}
 						}
 					});
 					this.pict.views.PictFormMetacontroller.triggerGlobalInputEvent(
@@ -181,6 +191,16 @@ class CustomInputHandler extends libPictSectionInputExtension
 						if (Array.isArray(tmpGroupConfig.PostSolvers))
 						{
 							this.pict.providers.DynamicSolver.executeSolvers(pView, tmpGroupConfig.PostSolvers, `AutofillTriggerGroup hash ${tmpGroupConfig.TriggerGroupHash} tabular post-trigger`);
+							const tmpMarshalScope = tmpGroupConfig.MarshalOnComplete;
+							if (tmpMarshalScope === true)
+							{
+								this.pict.views.PictFormMetacontroller.marshalToView();
+							}
+							else if (tmpMarshalScope)
+							{
+								this.pict.views.PictFormMetacontroller.marshalSectionToView(tmpMarshalScope.Section);
+								this.pict.views.PictFormMetacontroller.marshalInputToView(tmpMarshalScope.Input);
+							}
 						}
 					});
 					this.pict.views.PictFormMetacontroller.triggerGlobalInputEvent(
@@ -254,6 +274,16 @@ class CustomInputHandler extends libPictSectionInputExtension
 			if (Array.isArray(tmpAutoFillTriggerGroup.PostSolvers))
 			{
 				this.pict.providers.DynamicSolver.executeSolvers(pView, tmpAutoFillTriggerGroup.PostSolvers, `AutofillTriggerGroup hash ${tmpAutoFillTriggerGroup.TriggerGroupHash} post-autofill`);
+				const tmpMarshalScope = tmpAutoFillTriggerGroup.MarshalOnComplete;
+				if (tmpMarshalScope === true)
+				{
+					this.pict.views.PictFormMetacontroller.marshalToView();
+				}
+				else if (tmpMarshalScope)
+				{
+					this.pict.views.PictFormMetacontroller.marshalSectionToView(tmpMarshalScope.Section);
+					this.pict.views.PictFormMetacontroller.marshalInputToView(tmpMarshalScope.Input);
+				}
 			}
 		}
 

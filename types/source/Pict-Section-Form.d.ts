@@ -15,6 +15,9 @@ declare const _exports: {
         LifecycleVisualization: typeof import("./views/support/Pict-View-PSF-LifeCycle-Visualization.js");
         DebugViewer: typeof import("./views/support/Pict-View-PSF-DebugViewer.js");
     };
+    RichTextInput: typeof import("./providers/inputs/Pict-Provider-Input-RichText.js");
+    DiagramInput: typeof import("./providers/inputs/Pict-Provider-Input-Diagram.js");
+    themeifySVG: (pSVG: string, pPaletteOrProfile?: object) => string;
 };
 export = _exports;
 //# sourceMappingURL=Pict-Section-Form.d.ts.map

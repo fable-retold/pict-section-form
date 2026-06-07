@@ -97,6 +97,30 @@ declare class DynamicTabularData extends libPictProvider {
      * @returns {boolean} - Returns true if the row was successfully deleted, false otherwise.
      */
     deleteDynamicTableRow(pView: any, pGroupIndex: number, pRowIndex: number | string): boolean;
+    /**
+     * Rebuild every OTHER section-form view whose DynamicColumns are sourced from
+     * pSourceRecordSetAddress: re-resolve their generated columns and rebuild their
+     * template + DOM. Call this in the RENDER phase (after a source row was added or
+     * removed, before solving + marshaling) so dependent tables paint their column
+     * changes up front instead of mid-marshal. Idempotent and safe when there are no
+     * dependent views (it simply finds none).
+     *
+     * @param {string} pSourceRecordSetAddress - RecordSetAddress whose rows drive the columns.
+     */
+    _rebuildDependentDynamicColumnViews(pSourceRecordSetAddress: string): void;
+    /**
+     * For position-keyed DynamicColumns (KeyBy: "Position") sourced from
+     * pSourceRecordSetAddress, shift each dependent row's positional cells down past
+     * a just-removed source index so values stay aligned with their column. Cells are
+     * addressed by resolving the generator's InformaryDataAddressTemplate with the
+     * synthetic { __Index } record, the same way columns are generated. No-op for
+     * value-keyed generators (their data stays attached to the stable value).
+     *
+     * @param {string} pSourceRecordSetAddress - RecordSetAddress of the deleted-from source.
+     * @param {number} pDeletedIndex - Index of the source row that was removed.
+     * @param {number} pOriginalLength - Source row count BEFORE the removal.
+     */
+    _spliceDependentPositionalColumns(pSourceRecordSetAddress: string, pDeletedIndex: number, pOriginalLength: number): void;
 }
 declare namespace DynamicTabularData {
     export { _DefaultProviderConfiguration as default_configuration, ElementDescriptor };
