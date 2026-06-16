@@ -44,47 +44,46 @@ declare class PictDynamicFormsInformary extends libPictProvider {
      *
      * @param {object} pAppStateData - The application state data object to marshal the form data to.
      * @param {string} pFormHash - The form hash representing the form elements.
-     * @param {object} pManifest - The manifest object used to map form data to the application state data.
+     * @param {import('manyfest')} pManifest - The manifest object used to map form data to the application state data.
      * @param {string} [pDatum] - The datum hash to pull in.  If not provided, all data is marshalled.
      * @param {number|string} [pRecordIndex] - The record index to pull in.  If not provided, all data is marshalled.
      */
-    marshalFormToData(pAppStateData: object, pFormHash: string, pManifest: object, pDatum?: string, pRecordIndex?: number | string): void;
+    marshalFormToData(pAppStateData: object, pFormHash: string, pManifest: import("manyfest"), pDatum?: string, pRecordIndex?: number | string): void;
     /**
      * Marshals a specific form element's data to the application state data.
      *
      * @param {string} pFormHash - The hash of the form.
-     * @param {HTMLElement} tmpFormElement - The form element to marshal.
-     * @param {Object} tmpManifest - The manifest object to set values.
+     * @param {HTMLElement} pFormElement - The form element to marshal.
+     * @param {import('manyfest')} pManifest - The manifest object to set values.
      * @param {Object} pAppStateData - The application state data object.
      * @param {any} [pDatumFilter] - Optional filter for datum address.
      * @param {any} [pRecordIndexFilter] - Optional filter for record index.
      * @returns {boolean} - Returns false if the element falls outside the filters or if the browser value is null.
      */
-    marshalSpecicificFormElementToData(pFormHash: string, tmpFormElement: HTMLElement, tmpManifest: any, pAppStateData: any, pDatumFilter?: any, pRecordIndexFilter?: any): boolean;
+    marshalSpecicificFormElementToData(pFormHash: string, pFormElement: HTMLElement, pManifest: import("manyfest"), pAppStateData: any, pDatumFilter?: any, pRecordIndexFilter?: any): boolean;
     /**
      * Marshals data from some application state object to a specific subset of browser form elements.
      *
      * @param {object} pAppStateData - The application state data to marshal into the form.  Usually AppData but can be other objects.
      * @param {string} pFormHash - The hash of the form to marshal data into.  This is the data-i-form attribute.
-     * @param {object} pManifest - The manifest object.  If not provided, the generic manifest is used.
+     * @param {import('manyfest')} pManifest - The manifest object.  If not provided, the generic manifest is used.
      */
-    marshalDataToForm(pAppStateData: object, pFormHash: string, pManifest: object): void;
+    marshalDataToForm(pAppStateData: object, pFormHash: string, pManifest: import("manyfest")): void;
     /**
      * Marshals specific element data to a form.
      *
-     * @param {string} pFormHash - The hash of the form.
      * @param {HTMLElement} pFormElement - The form element to marshal data to.
-     * @param {Object} tmpManifest - The manifest object containing data retrieval methods.
-     * @param {Object} pAppStateData - The application state data.
+     * @param {import('manyfest')} pManifest - The manifest object containing data retrieval methods.
+     * @param {Record<string, any>} pAppStateData - The application state data.
      * @returns {boolean} Returns false if the form element does not have a datum address.
      */
-    marshalSpecificElementDataToForm(pFormHash: string, pFormElement: HTMLElement, tmpManifest: any, pAppStateData: any): boolean;
+    marshalSpecificElementDataToForm(pFormElement: HTMLElement, pManifest: import("manyfest"), pAppStateData: Record<string, any>): boolean;
     /**
      * Manually marshals data to a form by assigning content based on context in the descriptor.
-     * @param {object} pInput - The input manifest descriptor to marshal data to form from.
+     * @param {Record<string, any>} pInput - The input manifest descriptor to marshal data to form from.
      * @returns boolean if assignment was successful
      */
-    manualMarshalDataToFormByInput(pInput: object): false | void;
+    manualMarshalDataToFormByInput(pInput: Record<string, any>): false | void;
     /**
      * Manually marshals tabular data to a form by assigning content based on context in the descriptor.
      * @param {object} pInput - The input manifest descriptor to marshal data to form from.

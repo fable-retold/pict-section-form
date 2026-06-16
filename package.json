@@ -1,6 +1,6 @@
 {
     "name": "pict-section-form",
-    "version": "1.2.3",
+    "version": "1.2.4",
     "description": "Pict dynamic form sections",
     "main": "source/Pict-Section-Form.js",
     "directories": {
@@ -21,7 +21,8 @@
         "build": "npx quack build",
         "test": "npx quack test",
         "lint": "eslint source/**",
-        "types": "tsc -p .",
+        "types": "tsc -p ./tsconfig.build.json",
+        "check": "tsc -p ./tsconfig.json --noEmit",
         "docker-dev-build": "docker build ./ -f Dockerfile_LUXURYCode -t pict-section-form-image:local",
         "docker-dev-run": "docker run -it -d --name pict-section-form-dev -p 48888:8080 -p 49999:9999 -v \"$PWD/.config:/home/coder/.config\"  -v \"$PWD:/home/coder/pict-section-form\" -u \"$(id -u):$(id -g)\" -e \"DOCKER_USER=$USER\" pict-section-form-image:local",
         "docker-dev-shell": "docker exec -it pict-section-form-dev /bin/bash"
@@ -31,6 +32,9 @@
     "license": "MIT",
     "devDependencies": {
         "@eslint/js": "^9.39.2",
+        "@types/chai": "^4.3.20",
+        "@types/mocha": "^10.0.10",
+        "@types/node": "^22.19.21",
         "browser-env": "^3.3.0",
         "eslint": "^9.39.2",
         "jquery": "^4.0.0",

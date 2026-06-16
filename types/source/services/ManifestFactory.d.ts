@@ -53,13 +53,14 @@ declare class ManifestFactory extends libFableServiceProviderBase {
      *
      * @param {Object} pView - The view containing the group.
      * @param {Object} pGroup - The group object (must already have supportingManifest).
-     * @returns {{added: Array<string>, removed: Array<string>, unchanged: Array<string>, changed: boolean}}
+     * @returns {{added: Array<string>, removed: Array<string>, unchanged: Array<string>, changed: boolean, namesChanged: boolean}}
      */
     _resolveDynamicColumns(pView: any, pGroup: any): {
         added: Array<string>;
         removed: Array<string>;
         unchanged: Array<string>;
         changed: boolean;
+        namesChanged: boolean;
     };
     /**
      * Adds a manifest descriptor to the manifest.

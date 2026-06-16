@@ -205,6 +205,208 @@ declare class TabularLayout extends libPictSectionGroupLayout {
      * @param {Object} pGroup
      */
     _reapplyTabularSelectionHighlights(pView: any, pGroup: any): void;
+    /**
+     * Normalize a Group.ColumnChooser config value.
+     *
+     * Accepts `true` (use all defaults) or an object
+     * `{ Enabled, DataAddress, ButtonLabel, DefaultHiddenColumns }`. Returns null
+     * when the chooser is not enabled (the feature is strictly opt-in).
+     *
+     * - `DataAddress` — address (relative to the form's marshal destination) where
+     *   the array of hidden column hashes is stored, so it persists with the form data.
+     * - `ButtonLabel` — text for the trigger button above the table.
+     * - `DefaultHiddenColumns` — column hashes hidden until the user changes them
+     *   (merged with any descriptor-level `PictForm.TabularDefaultHidden` flags).
+     *
+     * @param {boolean|Object} pConfigValue
+     * @param {string} pDefaultDataAddress
+     * @returns {{DataAddress: string, ButtonLabel: string, DefaultHiddenColumns: Array<string>}|null}
+     */
+    _normalizeColumnChooserConfig(pConfigValue: boolean | any, pDefaultDataAddress: string): {
+        DataAddress: string;
+        ButtonLabel: string;
+        DefaultHiddenColumns: Array<string>;
+    } | null;
+    /**
+     * Lazily normalize (and cache on the group) the ColumnChooser config. The
+     * template bake re-normalizes each pass; this accessor covers code paths
+     * (marshal hooks, inline handlers) that may run against a group whose
+     * template hasn't been baked yet.
+     *
+     * @param {Object} pGroup
+     * @returns {{DataAddress: string, ButtonLabel: string, DefaultHiddenColumns: Array<string>}|null}
+     */
+    _ensureTabularColumnChooserConfig(pGroup: any): {
+        DataAddress: string;
+        ButtonLabel: string;
+        DefaultHiddenColumns: Array<string>;
+    } | null;
+    /**
+     * The absolute address (within the form's marshal destination) of the
+     * chooser's hidden-column-hash array.
+     *
+     * @param {Object} pView
+     * @param {{DataAddress: string}} pChooserConfig
+     * @returns {string}
+     */
+    _getTabularHiddenColumnsAddress(pView: any, pChooserConfig: {
+        DataAddress: string;
+    }): string;
+    /**
+     * The set of column hashes hidden BY DEFAULT for a group: the chooser
+     * config's DefaultHiddenColumns plus every descriptor flagged
+     * `PictForm.TabularDefaultHidden`. These apply only until the user changes
+     * column visibility (which writes an explicit array into the form data).
+     *
+     * @param {Object} pGroup
+     * @returns {Array<string>}
+     */
+    _getTabularColumnChooserDefaultHidden(pGroup: any): Array<string>;
+    /**
+     * The EFFECTIVE set of chooser-hidden column hashes for a group: the array
+     * stored in the form data when the user has made choices, otherwise the
+     * configured defaults. Returns null when the chooser is not enabled, so
+     * callers can use a single falsy check to keep the legacy code path intact.
+     *
+     * @param {Object} pView
+     * @param {Object} pGroup
+     * @returns {Set<string>|null}
+     */
+    _getTabularColumnChooserHiddenSet(pView: any, pGroup: any): Set<string> | null;
+    /**
+     * A canonical string for the group's effective hidden-column set, used to
+     * detect (on marshal) that loaded form data carries different column
+     * visibility than the table template was baked with.
+     *
+     * @param {Object} pView
+     * @param {Object} pGroup
+     * @returns {string}
+     */
+    _getTabularColumnChooserStateKey(pView: any, pGroup: any): string;
+    /**
+     * The columns the chooser can manage, in manifest order. Statically hidden
+     * descriptors (`PictForm.TabularHidden`) are never choosable and never
+     * listed. Each entry carries the descriptor's manifest index so inline
+     * handlers can address it without string-escaping concerns.
+     *
+     * @param {Object} pView
+     * @param {Object} pGroup
+     * @returns {Array<{Key: string, Name: string, ColumnIndex: number, Visible: boolean}>}
+     */
+    _getTabularChoosableColumns(pView: any, pGroup: any): Array<{
+        Key: string;
+        Name: string;
+        ColumnIndex: number;
+        Visible: boolean;
+    }>;
+    /**
+     * DOM element id for one of the chooser's baked elements (TRIGGER / POPOVER),
+     * namespaced by form and group so multiple tabular groups can each carry
+     * their own chooser.
+     *
+     * @param {Object} pView
+     * @param {Object} pGroup
+     * @param {string} pElement
+     * @returns {string}
+     */
+    _getTabularColumnChooserElementId(pView: any, pGroup: any, pElement: string): string;
+    /**
+     * Builds the chooser bar baked above the table: a right-aligned trigger
+     * button (with a "n hidden" hint when columns are hidden) plus the empty
+     * popover container the open action renders into.
+     *
+     * @param {Object} pView
+     * @param {Object} pGroup
+     * @returns {string}
+     */
+    _buildTabularColumnChooserBarHTML(pView: any, pGroup: any): string;
+    /**
+     * Renders the chooser popover's content (backdrop + panel of checkbox rows +
+     * reset footer) into its baked container. Runs on open and after each toggle
+     * (the table re-render replaces the popover element, so its content must be
+     * repainted to keep the menu open across toggles).
+     *
+     * @param {Object} pView
+     * @param {Object} pGroup
+     */
+    _renderTabularColumnChooserPopover(pView: any, pGroup: any): void;
+    /**
+     * Reflect the chooser popover's open/closed state on its container element,
+     * positioning it against the trigger when opening.
+     *
+     * @param {Object} pView
+     * @param {Object} pGroup
+     * @param {boolean} pOpen
+     */
+    _paintTabularColumnChooserOpenState(pView: any, pGroup: any, pOpen: boolean): void;
+    /**
+     * Position the (fixed) chooser popover against its trigger button, flipping
+     * above when the room below is genuinely cramped — same approach as the
+     * recordset's column chooser, so no ancestor overflow can clip it.
+     *
+     * @param {Object} pView
+     * @param {Object} pGroup
+     * @param {HTMLElement} pPopover
+     */
+    _positionTabularColumnChooserPopover(pView: any, pGroup: any, pPopover: HTMLElement): void;
+    /**
+     * Rebuild + re-render a tabular view and re-marshal the form data into it.
+     * Same tail as sortTabularColumn: the rebuild re-bakes the table template
+     * (column set, headers, chooser bar), the render repaints, the marshal
+     * pushes current values back into the freshly built inputs.
+     *
+     * @param {Object} pView
+     */
+    _rebuildTabularGroupView(pView: any): void;
+    /**
+     * Inline-handler entry point: opens/closes a group's column chooser popover
+     * (the trigger button's handler). Open/closed is derived from the popover's
+     * DOM class, not an instance flag — a re-render replaces the popover element
+     * (visually closed), so a flag would go stale and demand a double-click.
+     *
+     * @param {string} pViewHash
+     * @param {number|string} pGroupIndex
+     * @returns {boolean}
+     */
+    toggleTabularColumnChooser(pViewHash: string, pGroupIndex: number | string): boolean;
+    /**
+     * Inline-handler entry point: closes a group's column chooser popover (the
+     * backdrop's handler).
+     *
+     * @param {string} pViewHash
+     * @param {number|string} pGroupIndex
+     * @returns {boolean}
+     */
+    closeTabularColumnChooser(pViewHash: string, pGroupIndex: number | string): boolean;
+    /**
+     * Inline-handler entry point: shows/hides one column (a chooser checkbox's
+     * handler). Writes the updated hidden-hash array into the form data (so it
+     * persists with a save), rebuilds the table template without the column,
+     * re-renders, re-marshals, then re-opens the popover the re-render closed.
+     *
+     * Hiding never touches the underlying record data — the column's values
+     * stay in the record set and reappear when the column is shown again.
+     *
+     * Refuses to hide the last visible column (the checkbox snaps back).
+     *
+     * @param {string} pViewHash
+     * @param {number|string} pGroupIndex
+     * @param {number|string} pColumnIndex - The column's manifest index (stable within a bake).
+     * @param {boolean} pVisible - true to show the column, false to hide it.
+     * @returns {boolean}
+     */
+    toggleTabularColumnVisibility(pViewHash: string, pGroupIndex: number | string, pColumnIndex: number | string, pVisible: boolean): boolean;
+    /**
+     * Inline-handler entry point: resets a group's column visibility to its
+     * configured defaults (the reset footer button's handler). Writes the
+     * default hidden set into the form data explicitly — the user interacted,
+     * so the state should serialize deterministically with a save.
+     *
+     * @param {string} pViewHash
+     * @param {number|string} pGroupIndex
+     * @returns {boolean}
+     */
+    resetTabularColumnVisibility(pViewHash: string, pGroupIndex: number | string): boolean;
 }
 import libPictSectionGroupLayout = require("../Pict-Provider-DynamicLayout.js");
 //# sourceMappingURL=Pict-Layout-Tabular.d.ts.map

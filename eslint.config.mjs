@@ -3,8 +3,8 @@ import pluginJs from "@eslint/js";
 
 
 export default [
-	{ files: ["source/**"], languageOptions: { sourceType: "commonjs" } },
-	{ languageOptions: { globals: { ...globals.browser, ...globals.mocha, } } },
+	{ files: ["source/**", "test/**"], languageOptions: { sourceType: "commonjs" } },
+	{ languageOptions: { globals: { ...globals.browser, ...globals.mocha, ...globals.node, } } },
 	pluginJs.configs.recommended,
 	{ rules: { "no-prototype-builtins": "off", "no-unused-vars": "warn", "no-case-declarations": "warn" } },
 ];

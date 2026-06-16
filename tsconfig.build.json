@@ -1,5 +1,5 @@
 {
-	"include": ["source", "test"],
+	"include": ["source"],
 	"compilerOptions":
 	{
 		"target": "es2019",

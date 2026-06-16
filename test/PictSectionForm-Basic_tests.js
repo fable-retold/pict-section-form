@@ -39,6 +39,7 @@ class DoNothingApplication extends libPictSectionForm.PictFormApplication
 	{
 		this.solve();
 		this._testDone();
+		return true;
 	}
 }
 
@@ -65,10 +66,12 @@ class OrderedSolverApplication extends DoNothingApplication
 		super.onAfterSolve();
 		this.pict.log.info('OrderedSolverApplication onAfterSolve called.');
 		this._testDone?.();
+		return true;
 	}
 
 	onAfterInitialize()
 	{
+		return true;
 	}
 }
 
