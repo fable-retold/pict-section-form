@@ -234,11 +234,9 @@ class DynamicTabularData extends libPictProvider
 						return false;
 					}
 				)
-				// We expect this view to be in the set.
-				for (let i = 0; i < tmpViewsToRender.length; i++)
-				{
-					tmpViewsToRender[i].render();
-				}
+				// We expect this view to be in the set. Re-rendering an entity-selector
+				// table clobbers its selected values in the model, so preserve them.
+				this._renderViewsPreservingRecordSet(tmpGroup.RecordSetAddress, tmpViewsToRender);
 
 				// Rebuild any OTHER views whose DynamicColumns are sourced from this record set
 				// (e.g. a "% Passing" table whose columns are generated from this "Products" table)
@@ -494,11 +492,9 @@ class DynamicTabularData extends libPictProvider
 						return false;
 					}
 				)
-				// We expect this view to be in the set.
-				for (let i = 0; i < tmpViewsToRender.length; i++)
-				{
-					tmpViewsToRender[i].render();
-				}
+				// We expect this view to be in the set. Re-rendering an entity-selector
+				// table clobbers its selected values in the model, so preserve them.
+				this._renderViewsPreservingRecordSet(tmpGroup.RecordSetAddress, tmpViewsToRender);
 
 				// Rebuild any OTHER views whose DynamicColumns are sourced from this record set
 				// (e.g. a "% Passing" table whose columns are generated from this "Products" table)
@@ -514,6 +510,57 @@ class DynamicTabularData extends libPictProvider
 
 				// We've re-rendered but we don't know what needs to be marshaled based on the solve that ran above so marshal everything
 				this.pict.views.PictFormMetacontroller.marshalFormSections();
+			}
+		}
+	}
+
+	/**
+	 * Render every view in pViewsToRender while preserving pRecordSetAddress's data in
+	 * the model. Re-rendering a table that contains entity-selector cells (Material /
+	 * Organization / Product / etc.) destroys and recreates their select2 widgets; the
+	 * transient empty widget gets read back into the model and wipes the selected value
+	 * AND its resolved __Record for EVERY row -- the "selected Source / Name disappears
+	 * after adding or deleting a row" data-loss bug. Because it clobbers the saved
+	 * FormData, the value is then also missing from the exported PDF. A render() must be
+	 * model-non-destructive, so snapshot the record set before rendering and restore any
+	 * cleared fields afterward. No-op for plain (non-entity) tables, where render never
+	 * changes the model (snapshot == post-render state, restore is a no-op).
+	 *
+	 * @param {string} pRecordSetAddress - RecordSetAddress of the table being re-rendered.
+	 * @param {Array<Object>} pViewsToRender - Views bound to that record set to render.
+	 */
+	_renderViewsPreservingRecordSet(pRecordSetAddress, pViewsToRender)
+	{
+		if (!Array.isArray(pViewsToRender) || (pViewsToRender.length < 1))
+		{
+			return;
+		}
+		// Snapshot the record set (deep clone each row) from a view that owns it.
+		let tmpRecordSet = false;
+		let tmpSnapshot = false;
+		for (let i = 0; i < pViewsToRender.length; i++)
+		{
+			let tmpCandidate = pViewsToRender[i].sectionManifest.getValueByHash(pViewsToRender[i].getMarshalDestinationObject(), pRecordSetAddress);
+			if (Array.isArray(tmpCandidate))
+			{
+				tmpRecordSet = tmpCandidate;
+				tmpSnapshot = tmpCandidate.map((pRow) => (pRow && (typeof pRow === 'object')) ? JSON.parse(JSON.stringify(pRow)) : pRow);
+				break;
+			}
+		}
+		for (let i = 0; i < pViewsToRender.length; i++)
+		{
+			pViewsToRender[i].render();
+		}
+		// Restore any model fields a destructive re-render cleared (entity value + __Record).
+		if (Array.isArray(tmpRecordSet) && Array.isArray(tmpSnapshot))
+		{
+			for (let i = 0; i < tmpRecordSet.length; i++)
+			{
+				if (tmpRecordSet[i] && (typeof tmpRecordSet[i] === 'object') && tmpSnapshot[i] && (typeof tmpSnapshot[i] === 'object'))
+				{
+					Object.assign(tmpRecordSet[i], tmpSnapshot[i]);
+				}
 			}
 		}
 	}
@@ -817,10 +864,9 @@ class DynamicTabularData extends libPictProvider
 				}
 				return false;
 			});
-		for (let i = 0; i < tmpViewsToRender.length; i++)
-		{
-			tmpViewsToRender[i].render();
-		}
+		// Re-rendering an entity-selector table clobbers its selected values in the
+		// model, so preserve them across the render.
+		this._renderViewsPreservingRecordSet(pGroup.RecordSetAddress, tmpViewsToRender);
 
 		// Rebuild any OTHER views whose DynamicColumns are sourced from this record set
 		// HERE, in the render phase -- BEFORE the marshal below -- so the column DOM is
