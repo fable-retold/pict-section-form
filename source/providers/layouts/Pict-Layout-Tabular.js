@@ -1423,7 +1423,12 @@ class TabularLayout extends libPictSectionGroupLayout
 			}
 			if (tmpEditingRight)
 			{
-				tmpTemplate += `<th class="pict-row-label-spacer"></th>`;
+				// Parity cell for the right-side editing-controls column. Tag it with the same
+				// pict-tabular-editing-controls-header class as the left-controls header (below)
+				// so host CSS sizes it like the controls column AND collapses it in lockstep when
+				// that column is hidden -- otherwise it lingers as an empty phantom column and the
+				// stacked-header rule's bottom border overshoots the data columns.
+				tmpTemplate += `<th class="pict-row-label-spacer pict-tabular-editing-controls-header"></th>`;
 			}
 			tmpTemplate += tmpMetatemplateGenerator.getMetatemplateTemplateReference(pView, `-TabularTemplate-ExtraHeaderRow-Postfix`, `getGroup("${pGroup.GroupIndex}")`);
 		}
@@ -1456,7 +1461,9 @@ class TabularLayout extends libPictSectionGroupLayout
 			}
 			if (tmpEditingRight)
 			{
-				tmpColumnSelectRow += `<th class="pict-row-label-spacer"></th>`;
+				// Parity cell for the right-side editing-controls column (mirrors the extra-header
+				// row above) -- collapses with the column via pict-tabular-editing-controls-header.
+				tmpColumnSelectRow += `<th class="pict-row-label-spacer pict-tabular-editing-controls-header"></th>`;
 			}
 			tmpColumnSelectRow += `</tr>`;
 			tmpTemplate += tmpColumnSelectRow;
@@ -1647,6 +1654,8 @@ class TabularLayout extends libPictSectionGroupLayout
 				{
 					pView.rebuildCustomTemplate();
 					pView.render();
+					// Refill the freshly rebuilt table DOM in this same marshal cycle.
+					this._refillAfterDynamicColumnRebuild(pView);
 				}
 				finally
 				{
@@ -1666,6 +1675,8 @@ class TabularLayout extends libPictSectionGroupLayout
 				try
 				{
 					pView.render();
+					// Same-cycle refill: a label-only re-render still repaints the cell DOM.
+					this._refillAfterDynamicColumnRebuild(pView);
 				}
 				finally
 				{
@@ -1691,6 +1702,8 @@ class TabularLayout extends libPictSectionGroupLayout
 				{
 					pView.rebuildCustomTemplate();
 					pView.render();
+					// Refill the freshly rebuilt table DOM in this same marshal cycle.
+					this._refillAfterDynamicColumnRebuild(pView);
 				}
 				finally
 				{
@@ -1705,6 +1718,30 @@ class TabularLayout extends libPictSectionGroupLayout
 		// Keep selection highlights in sync with the (possibly reloaded) selection data.
 		this._reapplyTabularSelectionHighlights(pView, pGroup);
 		return true;
+	}
+
+	/**
+	 * After a mid-marshal DynamicColumns rebuild/re-render, the freshly painted table DOM
+	 * is empty: the enclosing onMarshalToView already ran its marshalDataToForm BEFORE this
+	 * hook re-rendered, so the dynamic cells lost the values that pass had just written and
+	 * would only refill on the NEXT marshal -- the "% Passing table blanks on row add/delete
+	 * or Source/Name select until another action brings it back" bug. Re-marshal the view's
+	 * data into the new DOM here so the cells repopulate within the SAME cycle. This is safe
+	 * to call from inside onDataMarshalToForm: marshalDataToForm only writes model values into
+	 * the inputs and does NOT itself invoke onDataMarshalToForm, so it cannot recurse here.
+	 *
+	 * @param {Object} pView
+	 */
+	_refillAfterDynamicColumnRebuild(pView)
+	{
+		try
+		{
+			this.pict.providers.Informary.marshalDataToForm(pView.getMarshalDestinationObject(), pView.formID, pView.sectionManifest);
+		}
+		catch (pError)
+		{
+			this.log.error(`Error refilling tabular dynamic-column cells after rebuild: ${pError}`);
+		}
 	}
 }
 
