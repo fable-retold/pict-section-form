@@ -1423,7 +1423,12 @@ class TabularLayout extends libPictSectionGroupLayout
 			}
 			if (tmpEditingRight)
 			{
-				tmpTemplate += `<th class="pict-row-label-spacer"></th>`;
+				// Parity cell for the right-side editing-controls column. Tag it with the same
+				// pict-tabular-editing-controls-header class as the left-controls header (below)
+				// so host CSS sizes it like the controls column AND collapses it in lockstep when
+				// that column is hidden -- otherwise it lingers as an empty phantom column and the
+				// stacked-header rule's bottom border overshoots the data columns.
+				tmpTemplate += `<th class="pict-row-label-spacer pict-tabular-editing-controls-header"></th>`;
 			}
 			tmpTemplate += tmpMetatemplateGenerator.getMetatemplateTemplateReference(pView, `-TabularTemplate-ExtraHeaderRow-Postfix`, `getGroup("${pGroup.GroupIndex}")`);
 		}
@@ -1456,7 +1461,9 @@ class TabularLayout extends libPictSectionGroupLayout
 			}
 			if (tmpEditingRight)
 			{
-				tmpColumnSelectRow += `<th class="pict-row-label-spacer"></th>`;
+				// Parity cell for the right-side editing-controls column (mirrors the extra-header
+				// row above) -- collapses with the column via pict-tabular-editing-controls-header.
+				tmpColumnSelectRow += `<th class="pict-row-label-spacer pict-tabular-editing-controls-header"></th>`;
 			}
 			tmpColumnSelectRow += `</tr>`;
 			tmpTemplate += tmpColumnSelectRow;
