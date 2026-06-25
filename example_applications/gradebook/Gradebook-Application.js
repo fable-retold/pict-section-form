@@ -136,6 +136,7 @@ module.exports.default_configuration.pict_configuration = (
 							"RowSelection": true,
 							"ColumnSelection": true,
 							"ColumnChooser": true,
+							"ColumnSorting": true,
 							"Headers":
 							[
 								[

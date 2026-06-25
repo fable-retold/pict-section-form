@@ -859,6 +859,16 @@ Glug glug glug Oo... -->
 `
 		},
 		{
+			// The column label only (no <th> wrapper). Used by the ColumnSorting
+			// header cell so the label resolves dynamically on every render -- the
+			// same way the default HeaderCell above does -- instead of being baked
+			// as a static string when the template is built. This lets DynamicColumns
+			// name changes (e.g. via refreshtabularsection) update the visible header
+			// without a full rebuildCustomTemplate.
+			"HashPostfix": "-TabularTemplate-HeaderCellLabel",
+			"Template": /*HTML*/`{~D:Record.Name~}`
+		},
+		{
 			"HashPostfix": "-TabularTemplate-RowHeader-Postfix",
 			"Template": /*HTML*/`
 					</tr>

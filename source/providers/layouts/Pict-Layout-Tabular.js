@@ -98,8 +98,14 @@ class TabularLayout extends libPictSectionGroupLayout
 			tmpStateClass = 'pict-tabular-sort-desc';
 		}
 		let tmpGlyph = (typeof this.pict.icon === 'function') ? this.pict.icon(tmpIconName) : '';
-		let tmpName = this._escapeHTML((pDescriptor && pDescriptor.Name != null) ? String(pDescriptor.Name) : '');
-		return `\n\t\t\t\t\t\t<th data-tabular-column-index="${pColumnIndex}">${tmpName} `
+		// Resolve the column label through a metatemplate reference (not a baked
+		// literal) so it re-resolves on every render -- this keeps the sortable
+		// header in lock-step with the descriptor Name the same way the default
+		// (non-sorting) header does. The sort-control glyph/state below is baked,
+		// which is fine: it only changes on a sort click, which rebuilds anyway.
+		let tmpLabelReference = this.pict.providers.MetatemplateGenerator.getMetatemplateTemplateReference(
+			pView, `-TabularTemplate-HeaderCellLabel`, `getTabularRecordInput("${pGroup.GroupIndex}","${pColumnIndex}")`);
+		return `\n\t\t\t\t\t\t<th data-tabular-column-index="${pColumnIndex}">${tmpLabelReference} `
 			+ `<span class="pict-tabular-sort-control ${tmpStateClass}" `
 			+ `onclick="_Pict.providers['Pict-Layout-Tabular'].sortTabularColumn('${pView.Hash}', ${pGroup.GroupIndex}, ${pColumnIndex})">`
 			+ `${tmpGlyph}</span></th>\n`;

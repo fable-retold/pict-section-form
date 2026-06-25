@@ -1288,6 +1288,111 @@ suite('PictSectionForm Tabular Features', () =>
 				Expect(tmpLayout._compareTabularValues(null, 'a')).to.be.lessThan(0);
 			}, fDone);
 		});
+
+		// Regression: a ColumnSorting header must keep its label in lock-step with the
+		// descriptor Name. Before the fix, _buildSortableHeaderCell baked the resolved
+		// Name as a static string, so a label change applied by a render-only refresh
+		// (e.g. DynamicColumns recomputed via refreshtabularsection) never reached the
+		// visible header -- only a full rebuildCustomTemplate would. The label is now a
+		// metatemplate reference that re-resolves on every render, matching the default
+		// (non-sorting) header.
+		test('ColumnSorting header label is a dynamic metatemplate reference, not a baked literal', (fDone) =>
+		{
+			let App = makeApplication({
+				Hash: 'Students',
+				Layout: 'Tabular',
+				RecordSetAddress: 'Students',
+				RecordManifest: 'StudentEditor',
+				ColumnSorting: true
+			});
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpLayout = _Pict.providers['Pict-Layout-Tabular'];
+				let tmpNameIndex = tmpGroup.supportingManifest.elementAddresses.indexOf('StudentName');
+				let tmpDescriptor = tmpGroup.supportingManifest.elementDescriptors['StudentName'];
+				Expect(tmpDescriptor.Name).to.equal('Student', 'baseline descriptor name');
+
+				let tmpHeaderHTML = tmpLayout._buildSortableHeaderCell(tmpView, tmpGroup, tmpDescriptor, tmpNameIndex);
+				// The label is emitted as a metatemplate reference bound to the live descriptor...
+				Expect(tmpHeaderHTML).to.contain('-TabularTemplate-HeaderCellLabel', 'label rendered via the dynamic label template');
+				Expect(tmpHeaderHTML).to.contain(`getTabularRecordInput("${tmpGroup.GroupIndex}","${tmpNameIndex}")`, 'reference bound to this column descriptor');
+				// ...NOT baked as the literal name (which is what caused the stale header).
+				Expect(tmpHeaderHTML).to.not.contain('>Student ', 'descriptor name is not inlined as a static literal');
+				// The sort control is still baked (it only changes on a sort click, which rebuilds).
+				Expect(tmpHeaderHTML).to.contain('pict-tabular-sort-control', 'sort control still present');
+				Expect(tmpHeaderHTML).to.contain('sortTabularColumn', 'sort click handler still wired');
+			}, fDone);
+		});
+
+		test('-TabularTemplate-HeaderCellLabel is registered and resolves the descriptor Name (parity with the default header)', (fDone) =>
+		{
+			let App = makeApplication({
+				Hash: 'Students',
+				Layout: 'Tabular',
+				RecordSetAddress: 'Students',
+				RecordManifest: 'StudentEditor',
+				ColumnSorting: true
+			});
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				// The label template exists under the view's theme prefix and resolves the
+				// same {~D:Record.Name~} data tag the default (non-sorting) HeaderCell uses.
+				let tmpTemplateHash = tmpView.getThemeSpecificTemplateHash('-TabularTemplate-HeaderCellLabel');
+				Expect(tmpTemplateHash in _Pict.TemplateProvider.templates).to.equal(true, 'label template registered');
+				// Template entries are stored as raw template strings.
+				Expect(_Pict.TemplateProvider.templates[tmpTemplateHash]).to.contain('{~D:Record.Name~}', 'label resolves the descriptor Name dynamically');
+			}, fDone);
+		});
+
+		test('ColumnSorting header reflects a descriptor Name change on render() without a rebuildCustomTemplate', (fDone) =>
+		{
+			let App = makeApplication({
+				Hash: 'Students',
+				Layout: 'Tabular',
+				RecordSetAddress: 'Students',
+				RecordManifest: 'StudentEditor',
+				ColumnSorting: true
+			});
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				// Target the StudentName column specifically (the StudentEditor manifest
+				// also has a Section column at index 0).
+				let tmpNameIndex = tmpGroup.supportingManifest.elementAddresses.indexOf('StudentName');
+				let tmpHeaderSelector = `th[data-tabular-column-index="${tmpNameIndex}"]`;
+
+				// Render the section into its real destination so we can read the baked header.
+				let tmpContainerId = String(tmpView.sectionDefinition.DefaultDestinationAddress || '').replace('#', '');
+				let tmpContainer = window.document.createElement('div');
+				tmpContainer.id = tmpContainerId;
+				window.document.body.appendChild(tmpContainer);
+				try
+				{
+					tmpView.render();
+					let tmpHeader = tmpContainer.querySelector(tmpHeaderSelector);
+					Expect(tmpHeader).to.not.equal(null, 'a sortable header cell rendered');
+					Expect(tmpHeader.textContent).to.contain('Student', 'header shows the original descriptor name');
+
+					// Simulate what a render-only refresh (refreshtabularsection / DynamicColumns
+					// name recompute) does: the live descriptor's Name changes, then render() runs
+					// WITHOUT rebuildCustomTemplate(). The header must follow.
+					tmpGroup.supportingManifest.elementDescriptors['StudentName'].Name = 'Aggregate Base';
+					tmpView.render();
+
+					let tmpHeaderAfter = tmpContainer.querySelector(tmpHeaderSelector);
+					Expect(tmpHeaderAfter.textContent).to.contain('Aggregate Base', 'header updated to the new name on render alone');
+					Expect(tmpHeaderAfter.textContent).to.not.contain('Student', 'stale label no longer shown');
+				}
+				finally
+				{
+					window.document.body.removeChild(tmpContainer);
+				}
+			}, fDone);
+		});
 	});
 
 	suite('Tabular column chooser (ColumnChooser)', () =>
