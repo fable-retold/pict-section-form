@@ -8,10 +8,20 @@
 	  4. The column chooser via Group.ColumnChooser — a "Columns" menu of
 	     checkboxes above the table; the hidden set lives in the form data
 	     (<GroupHash>_HiddenColumns) so it survives a save/reload.
+	  5. ONE record set, many tabular projections. The Students roster, the Grade
+	     Book, the Performance breakdown and the Commentary grid ALL bind the same
+	     "Students" array (each tab is just a different column projection of it via
+	     its own RecordManifest). Because pict-section-form re-renders every tabular
+	     group that shares a RecordSetAddress when a row is added / removed / moved,
+	     adding a student on the roster tab makes that student appear on every other
+	     tab automatically — no glue code, no sync solver. This is the "tabular rows
+	     automatically map to a shared array" behavior. Per-assignment grades live at
+	     Students[i].Grades.<IDAssignment> and notes at Students[i].Notes.<IDAssignment>,
+	     so the dynamic Assignment columns hang off the same row object.
 
 	The host code itself does nothing interesting — it just wires a TabSectionSelector
-	for navigation, then defines four tabular sections. All the new behavior comes
-	from the manifest JSON below.
+	for navigation, then defines five tabular sections. All the behavior comes from
+	the manifest JSON below.
 */
 
 const libPictSectionForm = require('../../source/Pict-Section-Form.js');
@@ -108,7 +118,7 @@ module.exports.default_configuration.pict_configuration = (
 				 *   - Extra header row (the "Assignments" banner) above the auto super-header.
 				 *   - Dynamic columns: one column per row of `Assignments`, with each
 				 *     descriptor's Name = the assignment title and the data stored at
-				 *     `Grades[rowIndex].Grades.<IDAssignment>` (preserved on hide).
+				 *     `Students[rowIndex].Grades.<IDAssignment>` (preserved on hide).
 				 *   - HeaderGroupTemplate auto-extends Headers with a topic super-header
 				 *     row clustering consecutive same-topic columns.
 				 *   - RowSelection / ColumnSelection: check a row and/or a column to
@@ -131,7 +141,7 @@ module.exports.default_configuration.pict_configuration = (
 							"Hash": "GradebookGrid",
 							"Name": "Grade Book",
 							"Layout": "Tabular",
-							"RecordSetAddress": "Grades",
+							"RecordSetAddress": "Students",
 							"RecordManifest": "GradeRowEditor",
 							"RowSelection": true,
 							"ColumnSelection": true,
@@ -179,7 +189,7 @@ module.exports.default_configuration.pict_configuration = (
 							"Hash": "PerformanceGrid",
 							"Name": "Student Performance Breakdown",
 							"Layout": "Tabular",
-							"RecordSetAddress": "Grades",
+							"RecordSetAddress": "Students",
 							"RecordManifest": "GradeRowEditor",
 							"EditingControlsPosition": "hidden",
 							// Recomputes each row's average across its grade values whenever
@@ -217,9 +227,13 @@ module.exports.default_configuration.pict_configuration = (
 					/*
 					 * One colortabularrow() call per student row. Each reads the row's
 					 * `Average` and maps it to a band color: >=85 green, >=75 amber,
-					 * else red. The expressions cover the eight seeded students; adding
-					 * students would need matching rows here (a real app would generate
-					 * these, but an example keeps them explicit so the mechanism is clear).
+					 * else red. These presentational solvers are keyed by row index and
+					 * cover the eight seeded students. Adding a student still makes the
+					 * new row appear on every tab (the shared "Students" record set does
+					 * that automatically) — it just won't be color-banded until a matching
+					 * row-index solver exists. A real app would generate one per row; the
+					 * example keeps them explicit so the mechanism stays visible. Out-of-
+					 * range solvers are a safe no-op, so extra rows simply render unbanded.
 					 */
 					"Solvers":
 					[
@@ -235,9 +249,11 @@ module.exports.default_configuration.pict_configuration = (
 				},
 
 				/*
-				 * Tab 5 — Teacher commentary. Tabular grid where the data store is
-				 * `Commentary[].Notes[<IDAssignment>]`. Same DynamicColumns shape,
-				 * different InformaryDataAddress so the data path doesn't collide.
+				 * Tab 5 — Teacher commentary. Another projection of the shared
+				 * `Students` array; the data store is `Students[].Notes[<IDAssignment>]`.
+				 * Same DynamicColumns shape as the Grade Book, different
+				 * InformaryDataAddress (Notes vs Grades) so the two grids hang their
+				 * per-assignment cells off the same row object without colliding.
 				 */
 				{
 					"Hash": "Commentary",
@@ -248,7 +264,7 @@ module.exports.default_configuration.pict_configuration = (
 							"Hash": "CommentaryGrid",
 							"Name": "Teacher Commentary",
 							"Layout": "Tabular",
-							"RecordSetAddress": "Commentary",
+							"RecordSetAddress": "Students",
 							"RecordManifest": "CommentaryRowEditor",
 							"Headers":
 							[
