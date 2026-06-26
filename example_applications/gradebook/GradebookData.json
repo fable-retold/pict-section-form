@@ -3,14 +3,14 @@
 		"GradebookTab": "Gradebook"
 	},
 	"Students": [
-		{ "Section": "A", "StudentName": "Alice Carter",   "StudentID": "S-001" },
-		{ "Section": "A", "StudentName": "Brian Diaz",     "StudentID": "S-002" },
-		{ "Section": "A", "StudentName": "Carla Edwards",  "StudentID": "S-003" },
-		{ "Section": "B", "StudentName": "Devon Fox",      "StudentID": "S-004" },
-		{ "Section": "B", "StudentName": "Erika Gomez",    "StudentID": "S-005" },
-		{ "Section": "B", "StudentName": "Felix Hayes",    "StudentID": "S-006" },
-		{ "Section": "C", "StudentName": "Gabriela Ingram","StudentID": "S-007" },
-		{ "Section": "C", "StudentName": "Henry Jensen",   "StudentID": "S-008" }
+		{ "Section": "A", "StudentName": "Alice Carter",    "StudentID": "S-001", "Average": 89.43, "Grades": { "1": 95, "2": 88, "3": 91, "4": 84, "5": 76, "6": 100, "7": 92 }, "Notes": { "1": "Strong start", "3": "Great essay" } },
+		{ "Section": "A", "StudentName": "Brian Diaz",      "StudentID": "S-002", "Average": 77.57, "Grades": { "1": 72, "2": 80, "3": 65, "4": 78, "5": 88, "6": 90,  "7": 70 }, "Notes": { "5": "Needs practice on plot summary" } },
+		{ "Section": "A", "StudentName": "Carla Edwards",   "StudentID": "S-003", "Average": 88.71, "Grades": { "1": 88, "2": 85, "3": 92, "4": 90, "5": 95, "6": 85,  "7": 86 }, "Notes": {} },
+		{ "Section": "B", "StudentName": "Devon Fox",       "StudentID": "S-004", "Average": 70.00, "Grades": { "1": 60, "2": 68, "3": 70, "4": 72, "5": 65, "6": 80,  "7": 75 }, "Notes": { "1": "Borderline; offer extra worksheets" } },
+		{ "Section": "B", "StudentName": "Erika Gomez",     "StudentID": "S-005", "Average": 89.57, "Grades": { "1": 90, "2": 92, "3": 85, "4": 88, "5": 89, "6": 95,  "7": 88 }, "Notes": {} },
+		{ "Section": "B", "StudentName": "Felix Hayes",     "StudentID": "S-006", "Average": 77.14, "Grades": { "1": 75, "2": 78, "3": 80, "4": 76, "5": 82, "6": 70,  "7": 79 }, "Notes": {} },
+		{ "Section": "C", "StudentName": "Gabriela Ingram", "StudentID": "S-007", "Average": 87.43, "Grades": { "1": 82, "2": 90, "3": 88, "4": 85, "5": 91, "6": 92,  "7": 84 }, "Notes": { "6": "Beautiful color work" } },
+		{ "Section": "C", "StudentName": "Henry Jensen",    "StudentID": "S-008", "Average": 68.86, "Grades": { "1": 70, "2": 65, "3": 60, "4": 72, "5": 68, "6": 75,  "7": 72 }, "Notes": { "3": "Struggling; schedule one-on-one" } }
 	],
 	"Assignments": [
 		{ "IDAssignment": 1, "Title": "Addition",        "Topic": "Math",    "Points": 100, "Weight": 1.0 },
@@ -20,25 +20,5 @@
 		{ "IDAssignment": 5, "Title": "Reading: A Wrinkle in Time", "Topic": "Reading", "Points": 100, "Weight": 1.0 },
 		{ "IDAssignment": 6, "Title": "Watercolor Practice", "Topic": "Art", "Points": 100, "Weight": 0.5 },
 		{ "IDAssignment": 7, "Title": "Short Essay",     "Topic": "Writing", "Points": 100, "Weight": 1.5 }
-	],
-	"Grades": [
-		{ "Section": "A", "StudentName": "Alice Carter",    "Average": 89.43, "Grades": { "1": 95, "2": 88, "3": 91, "4": 84, "5": 76, "6": 100, "7": 92 } },
-		{ "Section": "A", "StudentName": "Brian Diaz",      "Average": 77.57, "Grades": { "1": 72, "2": 80, "3": 65, "4": 78, "5": 88, "6": 90,  "7": 70 } },
-		{ "Section": "A", "StudentName": "Carla Edwards",   "Average": 88.71, "Grades": { "1": 88, "2": 85, "3": 92, "4": 90, "5": 95, "6": 85,  "7": 86 } },
-		{ "Section": "B", "StudentName": "Devon Fox",       "Average": 70.00, "Grades": { "1": 60, "2": 68, "3": 70, "4": 72, "5": 65, "6": 80,  "7": 75 } },
-		{ "Section": "B", "StudentName": "Erika Gomez",     "Average": 89.57, "Grades": { "1": 90, "2": 92, "3": 85, "4": 88, "5": 89, "6": 95,  "7": 88 } },
-		{ "Section": "B", "StudentName": "Felix Hayes",     "Average": 77.14, "Grades": { "1": 75, "2": 78, "3": 80, "4": 76, "5": 82, "6": 70,  "7": 79 } },
-		{ "Section": "C", "StudentName": "Gabriela Ingram", "Average": 87.43, "Grades": { "1": 82, "2": 90, "3": 88, "4": 85, "5": 91, "6": 92,  "7": 84 } },
-		{ "Section": "C", "StudentName": "Henry Jensen",    "Average": 68.86, "Grades": { "1": 70, "2": 65, "3": 60, "4": 72, "5": 68, "6": 75,  "7": 72 } }
-	],
-	"Commentary": [
-		{ "Section": "A", "StudentName": "Alice Carter",    "Notes": { "1": "Strong start",   "3": "Great essay" } },
-		{ "Section": "A", "StudentName": "Brian Diaz",      "Notes": { "5": "Needs practice on plot summary" } },
-		{ "Section": "A", "StudentName": "Carla Edwards",   "Notes": {} },
-		{ "Section": "B", "StudentName": "Devon Fox",       "Notes": { "1": "Borderline; offer extra worksheets" } },
-		{ "Section": "B", "StudentName": "Erika Gomez",     "Notes": {} },
-		{ "Section": "B", "StudentName": "Felix Hayes",     "Notes": {} },
-		{ "Section": "C", "StudentName": "Gabriela Ingram", "Notes": { "6": "Beautiful color work" } },
-		{ "Section": "C", "StudentName": "Henry Jensen",    "Notes": { "3": "Struggling; schedule one-on-one" } }
 	]
 }
