@@ -1389,15 +1389,17 @@ class TabularLayout extends libPictSectionGroupLayout
 		// Leading (non-data) columns that precede the data cells: row-select, row labels, left controls.
 		let tmpLeadingColumnCount = (tmpRowSelectionEnabled ? 1 : 0) + tmpRowLabels.length + (tmpEditingLeft ? 1 : 0);
 
-		// When EditingControlsPosition isn't 'right' (the default), suppress the default
-		// extra-postfix slots by registering empty view-specific overrides. This keeps the
-		// existing template machinery intact for backwards compatibility -- consumers that
-		// don't opt in to the new behavior see identical output.
-		if (tmpEditingControlsPosition === 'left' || tmpEditingControlsPosition === 'hidden')
-		{
-			this.pict.TemplateProvider.addTemplate(pView.getViewSpecificTemplateHash('-TabularTemplate-Row-ExtraPostfix'), '');
-			this.pict.TemplateProvider.addTemplate(pView.getViewSpecificTemplateHash('-TabularTemplate-RowHeader-ExtraPostfix'), '');
-		}
+		// When EditingControlsPosition isn't 'right' (the default), the right-side editing-
+		// controls slots are suppressed PER GROUP by gating their emission on tmpEditingRight
+		// below (the RowHeader-ExtraPostfix parity cell and the per-row Row-ExtraPostfix cell).
+		//
+		// We must NOT suppress by registering an empty view-specific override here:
+		// getViewSpecificTemplateHash() is keyed by the view's formsTemplateSetPrefix, which is
+		// shared by EVERY tabular group in the section. A single 'hidden'/'left' group registering
+		// the empty override would shadow the default editing-controls template for sibling groups
+		// that DO want controls ('right'), deleting their menu column from the DOM entirely. The
+		// gate is the group's own EditingControlsPosition, so each group is independent and a
+		// view-specific override (if a host registers one) still applies to the groups that emit.
 
 		// The chooser bar sits ABOVE the group's table container (a div can't live
 		// inside <table> without the browser foster-parenting it out anyway).
@@ -1542,7 +1544,12 @@ class TabularLayout extends libPictSectionGroupLayout
 			tmpDataColumnCount++;
 		}
 
-		tmpTemplate += tmpMetatemplateGenerator.getMetatemplateTemplateReference(pView, `-TabularTemplate-RowHeader-ExtraPostfix`, `getGroup("${pGroup.GroupIndex}")`);
+		// Right-side editing-controls header parity cell -- only when this group keeps its
+		// controls on the right. Gated per group (matches the extra-header-row parity above).
+		if (tmpEditingRight)
+		{
+			tmpTemplate += tmpMetatemplateGenerator.getMetatemplateTemplateReference(pView, `-TabularTemplate-RowHeader-ExtraPostfix`, `getGroup("${pGroup.GroupIndex}")`);
+		}
 		tmpTemplate += tmpMetatemplateGenerator.getMetatemplateTemplateReference(pView, `-TabularTemplate-RowHeader-Postfix`, `getGroup("${pGroup.GroupIndex}")`);
 
 		// Warn on header alignment mismatches (data-column count must equal each extra-header
@@ -1584,7 +1591,13 @@ class TabularLayout extends libPictSectionGroupLayout
 		}
 
 		tmpTemplateSetVirtualRowTemplate += `\n\n{~T:${pGroup.SectionTabularRowTemplateHash}:Record~}\n`;
-		tmpTemplateSetVirtualRowTemplate += tmpMetatemplateGenerator.getMetatemplateTemplateReferenceRaw(pView, `-TabularTemplate-Row-ExtraPostfix`, `Record`);
+		// Right-side editing-controls cell (del/up/down) -- only when this group keeps its
+		// controls on the right. Gated per group so a sibling group's 'hidden'/'left' setting
+		// can't suppress this group's column. 'left' emits its controls via {~TEC:~} above.
+		if (tmpEditingRight)
+		{
+			tmpTemplateSetVirtualRowTemplate += tmpMetatemplateGenerator.getMetatemplateTemplateReferenceRaw(pView, `-TabularTemplate-Row-ExtraPostfix`, `Record`);
+		}
 		tmpTemplateSetVirtualRowTemplate += tmpMetatemplateGenerator.getMetatemplateTemplateReference(pView, `-TabularTemplate-Row-Postfix`, `getGroup("${pGroup.GroupIndex}")`);
 
 		// This is a custom template expression

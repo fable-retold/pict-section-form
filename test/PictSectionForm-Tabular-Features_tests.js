@@ -1687,4 +1687,81 @@ suite('PictSectionForm Tabular Features', () =>
 			}, fDone);
 		});
 	});
+
+	// ------------------------------------------------------------------------
+	// Regression: editing controls are PER GROUP, not per section.
+	// A 'hidden'/'left' tabular group used to register a view-shared empty
+	// template override (keyed by formsTemplateSetPrefix, which every group in
+	// the section shares), which deleted the right-side controls column of any
+	// sibling 'right' group -- the column was absent from the DOM, not just
+	// hidden. The fix gates the controls emission on the group's own
+	// EditingControlsPosition instead of a shared override.
+	// ------------------------------------------------------------------------
+	suite('Editing controls position is per-group (no section-wide bleed)', () =>
+	{
+		function makeTwoGroupApplication(pGroupA, pGroupB)
+		{
+			let App = makeApplication(pGroupA);
+			App.default_configuration.pict_configuration.DefaultFormManifest.Sections[0].Groups.push(JSON.parse(JSON.stringify(pGroupB)));
+			return App;
+		}
+
+		test("A sibling 'hidden' group does not suppress a 'right' group's controls column", (fDone) =>
+		{
+			let App = makeTwoGroupApplication(
+				{ Hash: 'Students', Layout: 'Tabular', RecordSetAddress: 'Students', RecordManifest: 'StudentEditor', EditingControlsPosition: 'hidden' },
+				{ Hash: 'Grades',   Layout: 'Tabular', RecordSetAddress: 'Grades',   RecordManifest: 'GradeRowEditor', EditingControlsPosition: 'right' }
+			);
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpLayout = _Pict.providers['Pict-Layout-Tabular'];
+				let tmpHidden = tmpView.sectionDefinition.Groups[0];
+				let tmpRight = tmpView.sectionDefinition.Groups[1];
+
+				// Bake in section order -- the 'hidden' group first, which is what used to
+				// poison the section by registering the view-shared empty override.
+				let tmpHiddenTemplate = tmpLayout.generateGroupLayoutTemplate(tmpView, tmpHidden);
+				let tmpRightTemplate = tmpLayout.generateGroupLayoutTemplate(tmpView, tmpRight);
+
+				// (1) ROOT-CAUSE GUARD: a hidden/left group must NOT register a section-shared
+				// empty override at the view-specific prefix (this is what shadowed the default
+				// controls template for every other group in the section).
+				Expect(tmpView.checkViewSpecificTemplate('-TabularTemplate-Row-ExtraPostfix')).to.equal(false, 'no section-shared per-row controls override registered');
+				Expect(tmpView.checkViewSpecificTemplate('-TabularTemplate-RowHeader-ExtraPostfix')).to.equal(false, 'no section-shared header controls override registered');
+
+				// (2) The 'hidden' group itself emits no right-side controls (header parity or row cell).
+				Expect(tmpHidden.SectionTabularRowVirtualTemplateHash).to.be.a('string');
+				let tmpHiddenRow = _Pict.TemplateProvider.templates[tmpHidden.SectionTabularRowVirtualTemplateHash];
+				Expect(tmpHiddenTemplate).to.not.contain('-TabularTemplate-RowHeader-ExtraPostfix', 'hidden group emits no header controls cell');
+				Expect(tmpHiddenRow).to.not.contain('-TabularTemplate-Row-ExtraPostfix', 'hidden group emits no per-row controls cell');
+
+				// (3) The 'right' sibling KEEPS its controls (header parity + per-row cell).
+				Expect(tmpRight.SectionTabularRowVirtualTemplateHash).to.be.a('string');
+				let tmpRightRow = _Pict.TemplateProvider.templates[tmpRight.SectionTabularRowVirtualTemplateHash];
+				Expect(tmpRightTemplate).to.contain('-TabularTemplate-RowHeader-ExtraPostfix', 'right group keeps its header controls cell');
+				Expect(tmpRightRow).to.contain('-TabularTemplate-Row-ExtraPostfix', 'right group keeps its per-row controls cell');
+
+				// (4) ...and that per-row reference resolves to the REAL del/up/down control
+				// (the default template is intact and reachable, not an empty override).
+				let tmpDefaultControl = _Pict.TemplateProvider.templates[tmpView.defaultTemplatePrefix + '-TabularTemplate-Row-ExtraPostfix'];
+				Expect(tmpDefaultControl).to.contain('deleteDynamicTableRow', 'default row-controls template still wired to the delete/move handlers');
+			}, fDone);
+		});
+
+		test("A lone 'right' (default) group keeps its controls column", (fDone) =>
+		{
+			let App = makeApplication({ Hash: 'Students', Layout: 'Tabular', RecordSetAddress: 'Students', RecordManifest: 'StudentEditor' });
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpLayout = _Pict.providers['Pict-Layout-Tabular'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpTemplate = tmpLayout.generateGroupLayoutTemplate(tmpView, tmpGroup);
+				let tmpRow = _Pict.TemplateProvider.templates[tmpGroup.SectionTabularRowVirtualTemplateHash];
+				Expect(tmpTemplate).to.contain('-TabularTemplate-RowHeader-ExtraPostfix', 'default (right) group has its header controls cell');
+				Expect(tmpRow).to.contain('-TabularTemplate-Row-ExtraPostfix', 'default (right) group has its per-row controls cell');
+			}, fDone);
+		});
+	});
 });
