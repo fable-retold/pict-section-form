@@ -1764,4 +1764,55 @@ suite('PictSectionForm Tabular Features', () =>
 			}, fDone);
 		});
 	});
+
+	suite('Row reorder performance (move skips the full source re-render)', () =>
+	{
+		test('moveDynamicTableRowUp reorders in place without full-rendering the source view, and repaints inputs via the hook', (fDone) =>
+		{
+			let App = makeApplication({
+				Hash: 'Students',
+				Layout: 'Tabular',
+				RecordSetAddress: 'Students',
+				RecordManifest: 'StudentEditor'
+			});
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpDTD = _Pict.providers.DynamicTabularData;
+
+				// A move must NOT go through the expensive full source-view render -- that path tears
+				// down and re-initializes every cell widget (each entity-selector select2 re-init is
+				// what made BatchSheetCombined take seconds per move)...
+				let tmpFullRenderCalls = 0;
+				let tmpOriginalRender = tmpDTD._renderViewsPreservingRecordSet;
+				tmpDTD._renderViewsPreservingRecordSet = function (...pArgs)
+				{
+					tmpFullRenderCalls++;
+					return tmpOriginalRender.apply(this, pArgs);
+				};
+				// ...and it MUST ask the input providers to repaint their display for the new order.
+				let tmpRepaintHookCalls = 0;
+				let tmpOriginalRun = tmpView.runInputProviderFunctions;
+				tmpView.runInputProviderFunctions = function (pFunctionName)
+				{
+					if (pFunctionName === 'onTabularRowReorderRepaint') { tmpRepaintHookCalls++; }
+					return tmpOriginalRun.apply(this, arguments);
+				};
+
+				let tmpBefore = _Pict.AppData.Students.map((pRow) => pRow.StudentName);
+				tmpDTD.moveDynamicTableRowUp(tmpView, 0, 1); // 'Bob' (index 1) moves up to index 0
+
+				let tmpAfter = _Pict.AppData.Students.map((pRow) => pRow.StudentName);
+
+				tmpDTD._renderViewsPreservingRecordSet = tmpOriginalRender;
+				tmpView.runInputProviderFunctions = tmpOriginalRun;
+
+				Expect(tmpBefore[0]).to.equal('Alice', 'sanity: row 0 started as Alice');
+				Expect(tmpAfter[0]).to.equal('Bob', 'moved row is now first in the model');
+				Expect(tmpAfter[1]).to.equal('Alice', 'displaced row shifted down');
+				Expect(tmpFullRenderCalls).to.equal(0, 'a reorder must not full-render the source view (the slow select2 teardown)');
+				Expect(tmpRepaintHookCalls).to.equal(1, 'a reorder repaints inputs in place via the onTabularRowReorderRepaint hook');
+			}, fDone);
+		});
+	});
 });

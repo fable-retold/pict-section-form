@@ -330,7 +330,7 @@ class DynamicTabularData extends libPictProvider
 				// Render (source + dependent views) BEFORE solving so dependent DynamicColumns tables
 				// don't blank until the next edit, and the solve's DOM side effects survive. Matches
 				// the add/delete handlers' order.
-				this._repaintAfterRowReorder(tmpGroup);
+				this._repaintAfterRowReorder(pView, tmpGroup);
 			}
 		}
 	}
@@ -375,7 +375,7 @@ class DynamicTabularData extends libPictProvider
 				// (e.g. SetGroupVisibility hiding a validation message) act on the freshly rebuilt
 				// DOM and survive, and so dependent DynamicColumns tables don't blank until the next
 				// edit. Matches the add/delete handlers' order.
-				this._repaintAfterRowReorder(tmpGroup);
+				this._repaintAfterRowReorder(pView, tmpGroup);
 			}
 		}
 	}
@@ -425,7 +425,7 @@ class DynamicTabularData extends libPictProvider
 				// (e.g. SetGroupVisibility hiding a validation message) act on the freshly rebuilt
 				// DOM and survive, and so dependent DynamicColumns tables don't blank until the next
 				// edit. Matches the add/delete handlers' order.
-				this._repaintAfterRowReorder(tmpGroup);
+				this._repaintAfterRowReorder(pView, tmpGroup);
 			}
 		}
 	}
@@ -843,43 +843,34 @@ class DynamicTabularData extends libPictProvider
 	 *
 	 * @param {Object} pGroup - The reordered group (its RecordSetAddress drives dependents).
 	 */
-	_repaintAfterRowReorder(pGroup)
+	_repaintAfterRowReorder(pView, pGroup)
 	{
-		// Render every view that renders this record set as a table (the source table itself
-		// plus any sibling views bound to the same RecordSetAddress).
-		let tmpViewsToRender = this.pict.views.PictFormMetacontroller.filterViews(
-			(pViewToTestForGroup) =>
-			{
-				if (!pViewToTestForGroup.isPictSectionForm)
-				{
-					return false;
-				}
-				let tmpGroupsToTest = pViewToTestForGroup.getGroups();
-				for (let i = 0; i < tmpGroupsToTest.length; i++)
-				{
-					if (tmpGroupsToTest[i].RecordSetAddress == pGroup.RecordSetAddress)
-					{
-						return true;
-					}
-				}
-				return false;
-			});
-		// Re-rendering an entity-selector table clobbers its selected values in the
-		// model, so preserve them across the render.
-		this._renderViewsPreservingRecordSet(pGroup.RecordSetAddress, tmpViewsToRender);
+		// A reorder (move up/down/set-index) preserves the row COUNT -- the source table's DOM rows
+		// already exist; only which row holds which value changes. A full source-view render() would
+		// tear down and re-create every cell widget, and each entity-selector select2 re-init costs
+		// roughly O(document size), so on a large form that is SECONDS per move. Skip the source
+		// render and let the marshal below push the reordered model values into the existing DOM rows
+		// in place. (Add/delete change the row count and still render via their own paths.) Skipping
+		// the render also removes the need for the snapshot/restore in _renderViewsPreservingRecordSet:
+		// with no destructive render, the entity values are never clobbered.
 
-		// Rebuild any OTHER views whose DynamicColumns are sourced from this record set
-		// HERE, in the render phase -- BEFORE the marshal below -- so the column DOM is
-		// correct (and re-labeled to the new order) when the marshal fills it. Without
-		// this the dependent table is only rebuilt mid-marshal (onDataMarshalToForm),
-		// which renders AFTER the cells were filled and blanks them until the next edit.
+		// Dependent DynamicColumns views still need their generated column labels re-resolved for the
+		// new order (cheap -- those tables carry no entity widgets).
 		this._rebuildDependentDynamicColumnViews(pGroup.RecordSetAddress);
 
-		// Run the solver
+		// Run the solver, then marshal the model back out to the existing form DOM.
 		this.pict.providers.DynamicSolver.solveViews();
-
-		// We've re-rendered but we don't know what needs to be marshaled based on the solve that ran above so marshal everything
 		this.pict.views.PictFormMetacontroller.marshalFormSections();
+
+		// marshalFormSections updates simple cells in place, but a stateful widget (an entity
+		// selector's select2) will not switch to a reordered value whose <option> isn't the one it
+		// currently shows. Ask each input provider to repaint its display for the new row order:
+		// entity selectors force their select2 to the row's current value, everything else no-ops.
+		// Cheap (in-place value set, no widget teardown) versus the full re-render this replaced.
+		if (pView && (typeof pView.runInputProviderFunctions === 'function'))
+		{
+			pView.runInputProviderFunctions('onTabularRowReorderRepaint', null, null, this.fable.getUUID());
+		}
 	}
 }
 
