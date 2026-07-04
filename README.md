@@ -271,7 +271,7 @@ of data in your application.
 
 ## Documentation
 
-The complete documentation - an interactive guide with live examples - is hosted at **[stevenvelozo.github.io/pict-section-form](https://fable-retold.github.io/pict-section-form/)**:
+The complete documentation - an interactive guide with live examples - is hosted at **[fable-retold.github.io/pict-section-form](https://fable-retold.github.io/pict-section-form/)**:
 
 | Document | Description |
 |----------|-------------|
@@ -365,4 +365,4 @@ MIT
 
 ## Contributing
 
-Pull requests are welcome. For details on our code of conduct, contribution process, and testing requirements, see the [Retold Contributing Guide](https://github.com/stevenvelozo/retold/blob/main/docs/contributing.md).
+Pull requests are welcome. For details on our code of conduct, contribution process, and testing requirements, see the [Retold Contributing Guide](https://github.com/fable-retold/retold/blob/main/docs/contributing.md).
