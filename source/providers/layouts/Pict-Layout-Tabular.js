@@ -1,5 +1,15 @@
 const libPictSectionGroupLayout = require('../Pict-Provider-DynamicLayout.js');
 
+// The resolved --theme-color-* tokens carried onto a column-chooser popover when it is portaled to
+// <body>: off its scoped container it would otherwise fall back to the stylesheet's hex defaults.
+// Mirrors pict-section-picker's PictView-Picker `_THEME_TOKENS`.
+const _COLCHOOSER_THEME_TOKENS =
+[
+	'--theme-color-text-primary', '--theme-color-text-secondary', '--theme-color-text-muted',
+	'--theme-color-border-default', '--theme-color-border-light', '--theme-color-background-panel',
+	'--theme-color-background-tertiary',
+];
+
 class TabularLayout extends libPictSectionGroupLayout
 {
 	constructor(pFable, pOptions, pServiceHash)
@@ -39,19 +49,24 @@ class TabularLayout extends libPictSectionGroupLayout
 				+ ' .pict-tabular-sort-control.pict-tabular-sort-asc, .pict-tabular-sort-control.pict-tabular-sort-desc { opacity: 1; }',
 				500);
 
-			// CSS for the optional ColumnChooser feature: a right-aligned trigger button
-			// above the table and a fixed-position popover of checkbox rows. Fixed +
-			// JS-positioned (like the recordset's column chooser) so no ancestor
-			// overflow can clip it; the transparent backdrop catches outside clicks.
-			this.pict.CSSMap.addCSS('Pict-Layout-Tabular-ColumnChooser-CSS', /*css*/`
-	.pict-tabular-colchooser-bar { display: flex; justify-content: flex-end; margin: 0 0 0.35rem; }
+			// CSS for the optional ColumnChooser feature: a right-aligned trigger button above the
+			// table plus a checkbox popover. Anchored the same listener-free way as pict-section-picker:
+			// the popover is position:absolute under the (position:relative) bar so it rides page scroll
+			// for free, and is portaled to <body> in DOCUMENT coords only when a clipping ancestor would
+			// otherwise cut it -- no scroll/resize handlers. The transparent backdrop catches outside
+			// clicks. Dark-mode blocks (below, with DARK var() fallbacks) let the widget theme correctly
+			// even where the host has not defined the --theme-color-* tokens; a host that HAS defined
+			// them still wins, and the token values are carried across when the popover is portaled.
+			let tmpColumnChooserBaseCSS = /*css*/`
+	.pict-tabular-colchooser-bar { position: relative; display: flex; justify-content: flex-end; margin: 0 0 0.35rem; }
 	.pict-tabular-colchooser-trigger { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; font: inherit; font-size: 0.88rem;
 		padding: 0.3rem 0.65rem; border: 1px solid var(--theme-color-border-default, #d7dce3); border-radius: 7px;
 		background: var(--theme-color-background-panel, #fff); color: var(--theme-color-text-secondary, #45505f); }
 	.pict-tabular-colchooser-trigger:hover { background: var(--theme-color-background-tertiary, #eceef2); color: var(--theme-color-text-primary, #1f2733); }
 	.pict-tabular-colchooser-count { font-size: 0.8em; color: var(--theme-color-text-muted, #6b7686); }
-	.pict-tabular-colchooser-pop { position: fixed; z-index: 30; min-width: 220px; max-width: 320px; display: none; }
+	.pict-tabular-colchooser-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; min-width: 220px; max-width: 320px; display: none; }
 	.pict-tabular-colchooser-pop.open { display: block; }
+	.pict-tabular-colchooser-pop.pict-tabular-colchooser-pop-portal { right: auto; }
 	.pict-tabular-colchooser-backdrop { position: fixed; inset: 0; z-index: 0; }
 	.pict-tabular-colchooser-panel { position: relative; z-index: 1; display: flex; flex-direction: column; max-height: min(70vh, 420px);
 		background: var(--theme-color-background-panel, #fff); border: 1px solid var(--theme-color-border-default, #d7dce3);
@@ -64,7 +79,29 @@ class TabularLayout extends libPictSectionGroupLayout
 	.pict-tabular-colchooser-footer { flex: 0 0 auto; display: flex; justify-content: flex-end; padding: 0.45rem 0.7rem; border-top: 1px solid var(--theme-color-border-light, #e8ebf0); }
 	.pict-tabular-colchooser-reset { font: inherit; font-size: 0.84rem; cursor: pointer; border: none; background: transparent; color: var(--theme-color-text-muted, #6b7686); padding: 0.15rem 0.3rem; border-radius: 5px; }
 	.pict-tabular-colchooser-reset:hover { color: var(--theme-color-text-primary, #1f2733); background: var(--theme-color-background-tertiary, #eceef2); }
-`,
+`;
+			// Dark-mode overrides: re-declare only the color-bearing rules with DARK var() fallbacks under
+			// each of the app's dark signals. Duplicated per selector (explicit [data-theme=dark] and
+			// .theme-dark, plus the system preference guarded by html:not([data-theme=light]) so an
+			// explicit light choice still wins) exactly as headlight-styles' bulma-*.scss does. Higher
+			// specificity than the base rules, so dark wins whenever its selector matches; the [data-theme]
+			// signal lives on <html>, so these still apply after a popover is portaled to <body>.
+			let fColumnChooserDarkRules = (pScope) => /*css*/`
+	${pScope} .pict-tabular-colchooser-trigger { border-color: var(--theme-color-border-default, #3a4250); background: var(--theme-color-background-panel, #242b36); color: var(--theme-color-text-secondary, #c3cad4); }
+	${pScope} .pict-tabular-colchooser-trigger:hover { background: var(--theme-color-background-tertiary, #2c3542); color: var(--theme-color-text-primary, #e6e9ee); }
+	${pScope} .pict-tabular-colchooser-count { color: var(--theme-color-text-muted, #8b95a4); }
+	${pScope} .pict-tabular-colchooser-panel { background: var(--theme-color-background-panel, #242b36); border-color: var(--theme-color-border-default, #3a4250); }
+	${pScope} .pict-tabular-colchooser-row { color: var(--theme-color-text-primary, #e6e9ee); }
+	${pScope} .pict-tabular-colchooser-row:hover { background: var(--theme-color-background-tertiary, #2c3542); }
+	${pScope} .pict-tabular-colchooser-footer { border-top-color: var(--theme-color-border-light, #333b47); }
+	${pScope} .pict-tabular-colchooser-reset { color: var(--theme-color-text-muted, #8b95a4); }
+	${pScope} .pict-tabular-colchooser-reset:hover { color: var(--theme-color-text-primary, #e6e9ee); background: var(--theme-color-background-tertiary, #2c3542); }
+`;
+			this.pict.CSSMap.addCSS('Pict-Layout-Tabular-ColumnChooser-CSS',
+				tmpColumnChooserBaseCSS
+				+ fColumnChooserDarkRules('[data-theme="dark"]')
+				+ fColumnChooserDarkRules('.theme-dark')
+				+ `@media (prefers-color-scheme: dark) {` + fColumnChooserDarkRules('html:not([data-theme="light"])') + `}`,
 				500);
 		}
 	}
@@ -1098,50 +1135,266 @@ class TabularLayout extends libPictSectionGroupLayout
 		tmpPopoverElements[0].classList.toggle('open', !!pOpen);
 		if (pOpen)
 		{
-			this._positionTabularColumnChooserPopover(pView, pGroup, tmpPopoverElements[0]);
+			this._applyTabularColumnChooserAnchor(pView, pGroup, tmpPopoverElements[0]);
+		}
+		else
+		{
+			// Bring a portaled popover home on close so a closed chooser never strands a node on <body>.
+			this._restoreTabularColumnChooserPopover(pView, pGroup, tmpPopoverElements[0]);
 		}
 	}
 
 	/**
-	 * Position the (fixed) chooser popover against its trigger button, flipping
-	 * above when the room below is genuinely cramped — same approach as the
-	 * recordset's column chooser, so no ancestor overflow can clip it.
+	 * Anchor the (open) chooser popover to its trigger with the same listener-free strategy as
+	 * pict-section-picker: keep it in the DOM and CSS-absolute under the (position:relative) bar --
+	 * which rides page scroll for free -- UNLESS a clipping ancestor would cut it, in which case
+	 * portal it to <body> and place it in document coords. No scroll/resize handlers: an absolute
+	 * (not fixed) panel tracks the document as it scrolls, so one placement holds.
 	 *
 	 * @param {Object} pView
 	 * @param {Object} pGroup
 	 * @param {HTMLElement} pPopover
 	 */
-	_positionTabularColumnChooserPopover(pView, pGroup, pPopover)
+	_applyTabularColumnChooserAnchor(pView, pGroup, pPopover)
 	{
-		let tmpTriggerElements = this.pict.ContentAssignment.getElement(`#${this._getTabularColumnChooserElementId(pView, pGroup, 'TRIGGER')}`);
-		if (!tmpTriggerElements.length || (typeof window === 'undefined'))
+		if (!pPopover || (typeof document === 'undefined') || (typeof window === 'undefined'))
 		{
 			return;
 		}
+		let tmpTrigger = document.getElementById(this._getTabularColumnChooserElementId(pView, pGroup, 'TRIGGER'));
+		if (!tmpTrigger)
+		{
+			return;
+		}
+		// Judge from the trigger (it never moves); a portaled panel has no clipping ancestors, so
+		// testing the panel itself would flip-flop.
+		if (this._tabularColumnChooserShouldPortal(tmpTrigger, pPopover))
+		{
+			this._portalTabularColumnChooserPopover(pPopover, tmpTrigger);
+		}
+		else
+		{
+			this._restoreTabularColumnChooserPopover(pView, pGroup, pPopover);
+		}
+	}
+
+	/**
+	 * Move the popover to <body> and place it against the trigger in document coords (viewport rect +
+	 * scroll), flipping above when the room below is genuinely cramped. Carries the resolved
+	 * --theme-color-* tokens across so the panel stays themed off its scoped container.
+	 *
+	 * @param {HTMLElement} pPopover
+	 * @param {HTMLElement} pTrigger
+	 */
+	_portalTabularColumnChooserPopover(pPopover, pTrigger)
+	{
+		if (!pPopover || !pTrigger || (typeof document === 'undefined') || (typeof window === 'undefined'))
+		{
+			return;
+		}
+		// Adopt this popover onto <body>, sweeping any stale same-id copy a prior re-render left behind.
+		this._sweepPortaledColchooserOrphans(pPopover.getAttribute('id'), pPopover);
+		if (pPopover.parentElement !== document.body)
+		{
+			document.body.appendChild(pPopover);
+		}
+		pPopover.classList.add('pict-tabular-colchooser-pop-portal');
+		// Carry the resolved --theme-color-* tokens across: off its scoped container the panel would
+		// otherwise fall back to the stylesheet hex defaults. Skip empty reads so a token the host never
+		// defined keeps its own var(--token, #hex) fallback (matches pict-section-picker's _portalPop).
+		if (typeof window.getComputedStyle === 'function')
+		{
+			let tmpComputed = window.getComputedStyle(pTrigger);
+			_COLCHOOSER_THEME_TOKENS.forEach((pToken) =>
+			{
+				let tmpValue = tmpComputed.getPropertyValue(pToken);
+				if (tmpValue && tmpValue.trim() !== '')
+				{
+					pPopover.style.setProperty(pToken, tmpValue.trim());
+				}
+			});
+		}
 		let tmpPanel = pPopover.querySelector('.pict-tabular-colchooser-panel');
-		let tmpRect = tmpTriggerElements[0].getBoundingClientRect();
+		let tmpRect = pTrigger.getBoundingClientRect();
 		let tmpGap = 6;
 		let tmpMargin = 8;
+		let tmpWidth = pPopover.offsetWidth || 240;
 		let tmpViewportHeight = window.innerHeight;
 		let tmpViewportWidth = window.innerWidth;
-		let tmpWidth = pPopover.offsetWidth || 240;
-		// Right-align the popover to the (right-aligned) trigger, clamped into the viewport.
-		pPopover.style.left = `${Math.round(Math.max(tmpMargin, Math.min(tmpRect.right - tmpWidth, tmpViewportWidth - tmpWidth - tmpMargin)))}px`;
-		pPopover.style.right = 'auto';
 		let tmpSpaceBelow = tmpViewportHeight - tmpRect.bottom - tmpGap - tmpMargin;
 		let tmpSpaceAbove = tmpRect.top - tmpGap - tmpMargin;
-		if (tmpSpaceBelow >= 220 || tmpSpaceBelow >= tmpSpaceAbove)
+		let tmpBelow = (tmpSpaceBelow >= 220) || (tmpSpaceBelow >= tmpSpaceAbove);
+		// Document coords (viewport rect + scroll): absolute against <body>, so the panel rides page
+		// scroll with no listener. Right-aligned to the trigger, clamped into the viewport.
+		pPopover.style.right = 'auto';
+		pPopover.style.bottom = 'auto';
+		pPopover.style.left = `${Math.round(Math.max(tmpMargin, Math.min(tmpRect.right - tmpWidth, tmpViewportWidth - tmpWidth - tmpMargin)) + window.scrollX)}px`;
+		if (tmpBelow)
 		{
-			pPopover.style.top = `${Math.round(tmpRect.bottom + tmpGap)}px`;
-			pPopover.style.bottom = 'auto';
+			pPopover.style.top = `${Math.round(tmpRect.bottom + tmpGap + window.scrollY)}px`;
+			pPopover.style.transform = '';
 			if (tmpPanel) { tmpPanel.style.maxHeight = `${Math.max(160, Math.min(tmpSpaceBelow, 420))}px`; }
 		}
 		else
 		{
-			pPopover.style.top = 'auto';
-			pPopover.style.bottom = `${Math.round(tmpViewportHeight - tmpRect.top + tmpGap)}px`;
+			pPopover.style.top = `${Math.round(tmpRect.top - tmpGap + window.scrollY)}px`;
+			pPopover.style.transform = 'translateY(-100%)';
 			if (tmpPanel) { tmpPanel.style.maxHeight = `${Math.max(160, Math.min(tmpSpaceAbove, 420))}px`; }
 		}
+	}
+
+	/**
+	 * Re-home a portaled popover into its bar and drop everything the portal wrote. Doubles as the
+	 * orphan sweeper: if a re-render already baked a fresh in-bar popover, the portaled one is stale
+	 * and gets discarded rather than duplicated.
+	 *
+	 * @param {Object} pView
+	 * @param {Object} pGroup
+	 * @param {HTMLElement} pPopover
+	 */
+	_restoreTabularColumnChooserPopover(pView, pGroup, pPopover)
+	{
+		if (!pPopover || (typeof document === 'undefined'))
+		{
+			return;
+		}
+		// Discard any OTHER portaled copy of this popover a prior re-render may have left on <body>.
+		this._sweepPortaledColchooserOrphans(pPopover.getAttribute('id'), pPopover);
+		if (pPopover.parentElement === document.body)
+		{
+			let tmpTrigger = document.getElementById(this._getTabularColumnChooserElementId(pView, pGroup, 'TRIGGER'));
+			let tmpBar = tmpTrigger ? tmpTrigger.parentElement : null;
+			let tmpFreshInBar = tmpBar ? tmpBar.querySelector('.pict-tabular-colchooser-pop') : null;
+			if (tmpBar && (!tmpFreshInBar || tmpFreshInBar === pPopover))
+			{
+				// Re-home the popover next to its trigger, inside the bar.
+				tmpBar.appendChild(pPopover);
+			}
+			else
+			{
+				// A re-render already baked a fresh in-bar popover; this portaled one is a leftover.
+				pPopover.remove();
+				return;
+			}
+		}
+		pPopover.classList.remove('pict-tabular-colchooser-pop-portal');
+		// Clear the inline offsets/transform, or they'd override the stylesheet and strand the panel.
+		pPopover.style.top = '';
+		pPopover.style.left = '';
+		pPopover.style.right = '';
+		pPopover.style.bottom = '';
+		pPopover.style.transform = '';
+		// Drop the copied tokens so back in the bar it inherits them live again.
+		_COLCHOOSER_THEME_TOKENS.forEach((pToken) => pPopover.style.removeProperty(pToken));
+		let tmpPanel = pPopover.querySelector('.pict-tabular-colchooser-panel');
+		if (tmpPanel) { tmpPanel.style.maxHeight = ''; }
+	}
+
+	/**
+	 * Remove any portaled copies of a chooser popover (matched by element id) that are direct children
+	 * of <body>, except the one to keep. Iterates body children so no attribute-selector escaping of
+	 * the id is needed, and is scoped by id so it never touches another table's portaled popover.
+	 *
+	 * @param {string} pElementId
+	 * @param {HTMLElement} pKeep
+	 */
+	_sweepPortaledColchooserOrphans(pElementId, pKeep)
+	{
+		if (!pElementId || (typeof document === 'undefined') || !document.body)
+		{
+			return;
+		}
+		Array.prototype.slice.call(document.body.children).forEach((pNode) =>
+		{
+			if (pNode !== pKeep && pNode.id === pElementId
+				&& pNode.classList && pNode.classList.contains('pict-tabular-colchooser-pop'))
+			{
+				pNode.remove();
+			}
+		});
+	}
+
+	/**
+	 * Portal when ANY clipping ancestor of the trigger would actually cut the popover -- an overflow
+	 * ancestor alone isn't enough, but a roomy inner clipper doesn't excuse a tighter one further out.
+	 *
+	 * @param {HTMLElement} pTrigger
+	 * @param {HTMLElement} pPopover
+	 * @returns {boolean}
+	 */
+	_tabularColumnChooserShouldPortal(pTrigger, pPopover)
+	{
+		let tmpWidth = (pPopover && pPopover.offsetWidth) ? pPopover.offsetWidth : 240;
+		let tmpClipper = this._tabularColumnChooserClippingAncestor(pTrigger);
+		while (tmpClipper)
+		{
+			if (this._tabularColumnChooserClipBites(pTrigger, tmpClipper, tmpWidth))
+			{
+				return true;
+			}
+			tmpClipper = this._tabularColumnChooserClippingAncestor(tmpClipper);
+		}
+		return false;
+	}
+
+	/**
+	 * Nearest ancestor (up to, not including, <body>) with an overflow clip on any axis, or null.
+	 * Stops at <body> because the document's own scroll is what the absolute anchoring rides on.
+	 *
+	 * @param {HTMLElement} pElement
+	 * @returns {HTMLElement|null}
+	 */
+	_tabularColumnChooserClippingAncestor(pElement)
+	{
+		if ((typeof window === 'undefined') || (typeof window.getComputedStyle !== 'function'))
+		{
+			return null;
+		}
+		let tmpNode = pElement ? pElement.parentElement : null;
+		while (tmpNode && tmpNode.nodeType === 1 && tmpNode !== document.body)
+		{
+			let tmpStyle = window.getComputedStyle(tmpNode);
+			if (tmpStyle && [ tmpStyle.overflow, tmpStyle.overflowX, tmpStyle.overflowY ].some((pValue) => pValue && pValue !== 'visible'))
+			{
+				return tmpNode;
+			}
+			tmpNode = tmpNode.parentElement;
+		}
+		return null;
+	}
+
+	/**
+	 * Would the clipper cut the popover if it opened in place? The CSS path opens downward, right-
+	 * aligned to the trigger; project that worst-case box (trigger bottom + gap, up to the max height)
+	 * and test whether any edge falls outside the clipper. 1px slack avoids a needless portal on a
+	 * flush edge.
+	 *
+	 * @param {HTMLElement} pTrigger
+	 * @param {HTMLElement} pClipper
+	 * @param {number} pWidth
+	 * @returns {boolean}
+	 */
+	_tabularColumnChooserClipBites(pTrigger, pClipper, pWidth)
+	{
+		if (!pTrigger || !pClipper || (typeof pTrigger.getBoundingClientRect !== 'function')
+			|| (typeof pClipper.getBoundingClientRect !== 'function'))
+		{
+			return true;
+		}
+		let tmpTriggerRect = pTrigger.getBoundingClientRect();
+		let tmpClipRect = pClipper.getBoundingClientRect();
+		let tmpGap = 6;
+		let tmpIdeal = 420;
+		let tmpSlack = 1;
+		let tmpWidthResolved = Math.max(220, pWidth || 220);
+		let tmpPanelTop = tmpTriggerRect.bottom + tmpGap;
+		let tmpPanelBottom = tmpPanelTop + tmpIdeal;
+		let tmpPanelRight = tmpTriggerRect.right;
+		let tmpPanelLeft = tmpTriggerRect.right - tmpWidthResolved;
+		return (tmpPanelBottom > tmpClipRect.bottom + tmpSlack)
+			|| (tmpPanelTop < tmpClipRect.top - tmpSlack)
+			|| (tmpPanelLeft < tmpClipRect.left - tmpSlack)
+			|| (tmpPanelRight > tmpClipRect.right + tmpSlack);
 	}
 
 	/**
