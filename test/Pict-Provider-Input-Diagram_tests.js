@@ -45,6 +45,34 @@ function buildPictWithStubs()
 	return new libPict();
 }
 
+/**
+ * Swap window.localStorage for an in-memory shim. jsdom runs on an opaque origin where merely
+ * READING window.localStorage throws, so a real round-trip can't be exercised without this.
+ *
+ * @param {Object} pStore - Backing object for the shim.
+ * @return {Function} Restores the original descriptor.
+ */
+function withStubbedStorage(pStore)
+{
+	let tmpOriginal = Object.getOwnPropertyDescriptor(window, 'localStorage');
+	Object.defineProperty(window, 'localStorage',
+	{
+		configurable: true,
+		writable:     true,
+		value:
+		{
+			getItem:    (pKey) => ((pKey in pStore) ? pStore[pKey] : null),
+			setItem:    (pKey, pValue) => { pStore[pKey] = String(pValue); },
+			removeItem: (pKey) => { delete pStore[pKey]; }
+		}
+	});
+	return () =>
+	{
+		if (tmpOriginal) Object.defineProperty(window, 'localStorage', tmpOriginal);
+		else delete window.localStorage;
+	};
+}
+
 suite('Pict-Provider-Input-Diagram', () =>
 {
 	test('module loads — class + default_configuration exposed', () =>
@@ -170,6 +198,158 @@ suite('Pict-Provider-Input-Diagram', () =>
 			Expect(tmpProvider.getMode('ArchDiagram')).to.equal('view');
 			done();
 		});
+	});
+
+	// --- slot targeting -------------------------------------------------------------------------
+	// A host template that gives the hidden <input> id="{RawHTMLID}" (it has to, if it wants the
+	// provider's value write-back to find it) used to steal every mode class off the display slot,
+	// which silently killed the open editor's sizing. The slot must win.
+
+	test('_setSlotModeClass flags the DISPLAY SLOT, not a same-id hidden input', () =>
+	{
+		let tmpPict     = buildPictWithStubs();
+		let tmpProvider = new libDiagramInput(tmpPict, {}, 'Pict-Input-Diagram');
+
+		document.body.innerHTML =
+			'<input type="hidden" id="ArchDiagram-input">' +
+			'<div id="DISPLAY-FOR-ArchDiagram-input" class="pict-section-form-diagram"></div>';
+
+		tmpProvider._setSlotModeClass(_StubInput, 'edit');
+
+		let tmpSlot   = document.getElementById('DISPLAY-FOR-ArchDiagram-input');
+		let tmpHidden = document.getElementById('ArchDiagram-input');
+		Expect(tmpSlot.classList.contains('pict-section-form-diagram-edit')).to.equal(true);
+		Expect(tmpSlot.classList.contains('mode-edit')).to.equal(true);
+		Expect(tmpHidden.classList.contains('pict-section-form-diagram-edit')).to.equal(false);
+
+		tmpProvider._setSlotModeClass(_StubInput, 'view');
+		Expect(tmpSlot.classList.contains('mode-view')).to.equal(true);
+		Expect(tmpSlot.classList.contains('pict-section-form-diagram-edit')).to.equal(false);
+		document.body.innerHTML = '';
+	});
+
+	// --- editor height --------------------------------------------------------------------------
+
+	test('_normalizeHeight coerces numbers and numeric strings to px, passes CSS lengths through', () =>
+	{
+		let tmpProvider = new libDiagramInput(buildPictWithStubs(), {}, 'Pict-Input-Diagram');
+		Expect(tmpProvider._normalizeHeight(640)).to.equal('640px');
+		Expect(tmpProvider._normalizeHeight('640')).to.equal('640px');
+		Expect(tmpProvider._normalizeHeight('640px')).to.equal('640px');
+		Expect(tmpProvider._normalizeHeight(' 40rem ')).to.equal('40rem');
+		Expect(tmpProvider._normalizeHeight('')).to.equal('');
+		Expect(tmpProvider._normalizeHeight(null)).to.equal('');
+		Expect(tmpProvider._normalizeHeight(0)).to.equal('');
+	});
+
+	test('storage access that throws degrades to the descriptor Height', () =>
+	{
+		// jsdom serves an opaque origin, so even READING window.localStorage throws a SecurityError —
+		// the same shape as Safari private mode. Nothing here may propagate that.
+		let tmpProvider = new libDiagramInput(buildPictWithStubs(), {}, 'Pict-Input-Diagram');
+		let tmpInput    = JSON.parse(JSON.stringify(_StubInput));
+		tmpInput.PictForm.Diagram.Height = '480px';
+
+		Expect(tmpProvider._readStoredHeight(tmpInput)).to.equal('');
+		Expect(tmpProvider._writeStoredHeight(tmpInput, '720px')).to.equal(false);
+		Expect(tmpProvider._resolveEditorHeight(tmpInput)).to.equal('480px');
+	});
+
+	test('_resolveEditorHeight prefers a stored height over the descriptor Height', () =>
+	{
+		let tmpProvider = new libDiagramInput(buildPictWithStubs(), {}, 'Pict-Input-Diagram');
+		let tmpInput    = JSON.parse(JSON.stringify(_StubInput));
+		tmpInput.PictForm.Diagram.Height = '480px';
+
+		let tmpStore = {};
+		let tmpRestore = withStubbedStorage(tmpStore);
+		try
+		{
+			Expect(tmpProvider._resolveEditorHeight(tmpInput)).to.equal('480px');
+
+			tmpProvider._writeStoredHeight(tmpInput, '720px');
+			Expect(tmpProvider._resolveEditorHeight(tmpInput)).to.equal('720px');
+
+			// and with neither, the stylesheet stays in charge
+			delete tmpInput.PictForm.Diagram.Height;
+			window.localStorage.removeItem(tmpProvider._heightStorageKey(tmpInput));
+			Expect(tmpProvider._resolveEditorHeight(tmpInput)).to.equal('');
+		}
+		finally { tmpRestore(); }
+	});
+
+	test('_applyEditorHeight sets the CSS variable and _clearEditorHeight strips edit sizing', () =>
+	{
+		let tmpProvider = new libDiagramInput(buildPictWithStubs(), {}, 'Pict-Input-Diagram');
+		let tmpInput    = JSON.parse(JSON.stringify(_StubInput));
+		tmpInput.PictForm.Diagram.Height = '600px';
+
+		document.body.innerHTML = '<div id="DISPLAY-FOR-ArchDiagram-input"></div>';
+		let tmpSlot = document.getElementById('DISPLAY-FOR-ArchDiagram-input');
+
+		// jsdom's CSSStyleDeclaration silently DROPS custom properties, so read them off a spy rather
+		// than off the element — the assertion is about what the provider asks for.
+		let tmpSet = [];
+		let tmpRemoved = [];
+		tmpSlot.style.setProperty    = (pName, pValue) => tmpSet.push([pName, pValue]);
+		tmpSlot.style.removeProperty = (pName) => tmpRemoved.push(pName);
+
+		tmpProvider._applyEditorHeight(tmpInput);
+		Expect(tmpSet).to.deep.equal([['--pict-diagram-height', '600px']]);
+		// any inline height left by an earlier drag has to go, or the variable never applies
+		Expect(tmpRemoved).to.deep.equal(['height']);
+
+		// dropping to view must not leave the static view pinned to the dragged size
+		tmpRemoved.length = 0;
+		tmpProvider._clearEditorHeight(tmpInput);
+		Expect(tmpRemoved).to.deep.equal(['height', 'width', '--pict-diagram-height']);
+		document.body.innerHTML = '';
+	});
+
+	test('_captureEditorHeight remembers a dragged height, and ONLY a dragged one', () =>
+	{
+		let tmpProvider = new libDiagramInput(buildPictWithStubs(), {}, 'Pict-Input-Diagram');
+		let tmpInput    = JSON.parse(JSON.stringify(_StubInput));
+		tmpInput.PictForm.Diagram.Height = '480px';
+
+		document.body.innerHTML = '<div id="DISPLAY-FOR-ArchDiagram-input"></div>';
+		let tmpSlot = document.getElementById('DISPLAY-FOR-ArchDiagram-input');
+
+		let tmpStore = {};
+		let tmpRestore = withStubbedStorage(tmpStore);
+		try
+		{
+			// No inline height — the descriptor's value is not the user's decision and must not stick.
+			Expect(tmpProvider._captureEditorHeight(tmpInput)).to.equal(false);
+			Expect(tmpProvider._resolveEditorHeight(tmpInput)).to.equal('480px');
+
+			// The grip writes an inline height; that IS a decision.
+			tmpSlot.style.height = '820px';
+			Expect(tmpProvider._captureEditorHeight(tmpInput)).to.equal(true);
+			Expect(tmpProvider._resolveEditorHeight(tmpInput)).to.equal('820px');
+		}
+		finally { tmpRestore(); document.body.innerHTML = ''; }
+	});
+
+	test('_buildEditorOptions defaults FormFactor to pointer and honours a descriptor override', () =>
+	{
+		let tmpPict     = buildPictWithStubs();
+		let tmpProvider = new libDiagramInput(tmpPict, {}, 'Pict-Input-Diagram');
+		let tmpInput    = JSON.parse(JSON.stringify(_StubInput));
+
+		Expect(tmpProvider._buildEditorOptions(tmpInput, '', {}).FormFactor).to.equal('pointer');
+
+		tmpInput.PictForm.Diagram.FormFactor = 'auto';
+		Expect(tmpProvider._buildEditorOptions(tmpInput, '', {}).FormFactor).to.equal('auto');
+	});
+
+	test('the open-editor CSS drives height from a variable and ships the resize grip', () =>
+	{
+		let tmpCSS = require('../source/providers/inputs/Pict-Provider-Input-Diagram-CSS.js');
+		Expect(tmpCSS).to.contain('--pict-diagram-height');
+		Expect(tmpCSS).to.contain('resize: vertical');
+		// a min-height on the inner chain would fight the grip on the way down
+		Expect(/\.pict-section-form-diagram-edit[^{]*\{[^}]*min-height:\s*420px/.test(tmpCSS)).to.equal(false);
 	});
 
 	test('themeifySVG re-export is callable from the main module entry', () =>

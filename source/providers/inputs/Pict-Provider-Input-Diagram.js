@@ -21,7 +21,8 @@
  *       "InputType": "Diagram",
  *       "Diagram": {
  *         "ThemeColors":           true,
- *         "Height":                "500px",
+ *         "Height":                "640px",
+ *         "FormFactor":            "pointer",
  *         "EditorImplementation":  "react",
  *         "EditorOptions":         { ... }
  *       }
@@ -197,6 +198,17 @@ class PictInputDiagram extends libPictSectionInputExtension
 	}
 
 	/**
+	 * Flag edit/view mode on the DISPLAY SLOT so the scoped CSS (sizing, the resize grip, the toggle
+	 * chip pseudo) has something to key off.
+	 *
+	 * The slot is resolved FIRST and the RawHTMLID element is only a fallback. That order is
+	 * load-bearing: a host template is free to put `id="{RawHTMLID}"` on the hidden <input> (it has
+	 * to, if it wants the provider's value write-back to find it), and when it does,
+	 * `getElementById(RawHTMLID)` returns that hidden input — so every mode class, and with it every
+	 * sizing rule keyed off `.pict-section-form-diagram-edit`, lands on an invisible element and the
+	 * editor silently falls back to the embed's own min-height. Our own default template omits that
+	 * id, so this reordering is a no-op there.
+	 *
 	 * @param {Object} pInput - The input definition object.
 	 * @param {string} pMode - The mode to set ('edit' or 'view').
 	 */
@@ -204,8 +216,8 @@ class PictInputDiagram extends libPictSectionInputExtension
 	{
 		if (typeof document === 'undefined') return;
 		let tmpRawHTMLID = pInput.Macro.RawHTMLID;
-		let tmpOuter = document.getElementById(tmpRawHTMLID) ||
-			document.querySelector(this.getContentDisplayHTMLID(tmpRawHTMLID));
+		let tmpOuter = document.querySelector(this.getContentDisplayHTMLID(tmpRawHTMLID)) ||
+			document.getElementById(tmpRawHTMLID);
 		if (!tmpOuter || !tmpOuter.classList) return;
 		tmpOuter.classList.remove('mode-edit', 'mode-view', 'pict-section-form-diagram-edit');
 		if (pMode === 'edit')
@@ -215,6 +227,204 @@ class PictInputDiagram extends libPictSectionInputExtension
 		else
 		{
 			tmpOuter.classList.add('mode-view');
+		}
+	}
+
+	// ----------------------------------------------------------------------------
+	// Editor height
+	// ----------------------------------------------------------------------------
+
+	/**
+	 * @param {Object} pInput - The input definition object.
+	 * @returns {Element} The display slot element for this input, or null when it isn't in the DOM.
+	 */
+	_getSlotElement(pInput)
+	{
+		if ((typeof document === 'undefined') || !pInput || !pInput.Macro) return null;
+		return document.querySelector(this.getContentDisplayHTMLID(pInput.Macro.RawHTMLID));
+	}
+
+	/**
+	 * Coerce a configured height into a CSS length. Bare numbers (and numeric strings) are treated as
+	 * pixels so a descriptor can say 640 or "640" as readily as "640px".
+	 *
+	 * @param {any} pValue - The configured height.
+	 * @returns {string} A CSS length, or '' when the value isn't usable.
+	 */
+	_normalizeHeight(pValue)
+	{
+		if (typeof pValue === 'number')
+		{
+			return (isFinite(pValue) && pValue > 0) ? `${pValue}px` : '';
+		}
+		if (typeof pValue !== 'string') return '';
+		let tmpValue = pValue.trim();
+		if (tmpValue.length < 1) return '';
+		if (/^[0-9]+(\.[0-9]+)?$/.test(tmpValue)) return `${tmpValue}px`;
+		// Anything else is passed through as authored (px/rem/vh/calc()/…) — the browser ignores a
+		// value it can't parse, which degrades to the stylesheet default rather than breaking layout.
+		return tmpValue;
+	}
+
+	/**
+	 * @param {Object} pInput - The input definition object.
+	 * @returns {string} The localStorage key this input's user-dragged height is remembered under.
+	 */
+	_heightStorageKey(pInput)
+	{
+		return `pict-input-diagram:height:${(pInput && pInput.Hash) || ''}`;
+	}
+
+	/**
+	 * @param {Object} pInput - The input definition object.
+	 * @returns {string} The remembered height for this input, or '' if there isn't one.
+	 */
+	_readStoredHeight(pInput)
+	{
+		try
+		{
+			if ((typeof window === 'undefined') || !window.localStorage) return '';
+			return this._normalizeHeight(window.localStorage.getItem(this._heightStorageKey(pInput)));
+		}
+		catch (pErr)
+		{
+			// Storage can throw outright (Safari private mode, blocked site data) — a forgotten height
+			// is not worth a broken editor.
+			return '';
+		}
+	}
+
+	/**
+	 * @param {Object} pInput - The input definition object.
+	 * @param {string} pHeight - The height to remember.
+	 * @returns {boolean} True if it was written.
+	 */
+	_writeStoredHeight(pInput, pHeight)
+	{
+		try
+		{
+			if ((typeof window === 'undefined') || !window.localStorage) return false;
+			window.localStorage.setItem(this._heightStorageKey(pInput), pHeight);
+			return true;
+		}
+		catch (pErr)
+		{
+			return false;
+		}
+	}
+
+	/**
+	 * Resolve the editor height for an input: a height the user dragged to wins over the descriptor's
+	 * configured Height, which wins over the stylesheet default (signalled by '').
+	 *
+	 * @param {Object} pInput - The input definition object.
+	 * @returns {string} A CSS length, or '' to leave the stylesheet in charge.
+	 */
+	_resolveEditorHeight(pInput)
+	{
+		let tmpStored = this._readStoredHeight(pInput);
+		if (tmpStored) return tmpStored;
+		let tmpDiagramOpts = (pInput.PictForm && pInput.PictForm.Diagram) || {};
+		return this._normalizeHeight(tmpDiagramOpts.Height);
+	}
+
+	/**
+	 * Push the resolved height onto the slot as `--pict-diagram-height`, which the scoped CSS reads.
+	 * Any inline height left behind by an earlier drag is dropped first so the variable is what
+	 * actually applies on a fresh mount.
+	 *
+	 * @param {Object} pInput - The input definition object.
+	 */
+	_applyEditorHeight(pInput)
+	{
+		let tmpSlot = this._getSlotElement(pInput);
+		if (!tmpSlot || !tmpSlot.style) return;
+		tmpSlot.style.removeProperty('height');
+		let tmpHeight = this._resolveEditorHeight(pInput);
+		if (tmpHeight)
+		{
+			tmpSlot.style.setProperty('--pict-diagram-height', tmpHeight);
+		}
+		else
+		{
+			tmpSlot.style.removeProperty('--pict-diagram-height');
+		}
+	}
+
+	/**
+	 * Strip the edit-mode sizing when dropping back to view. The resize grip writes an INLINE height
+	 * onto the slot, and that would otherwise pin the static SVG view to whatever the canvas was
+	 * dragged to.
+	 *
+	 * @param {Object} pInput - The input definition object.
+	 */
+	_clearEditorHeight(pInput)
+	{
+		let tmpSlot = this._getSlotElement(pInput);
+		if (!tmpSlot || !tmpSlot.style) return;
+		tmpSlot.style.removeProperty('height');
+		tmpSlot.style.removeProperty('width');
+		tmpSlot.style.removeProperty('--pict-diagram-height');
+	}
+
+	/**
+	 * Remember whatever height the slot is currently sitting at. Only an INLINE height counts — that is
+	 * what the native resize grip writes; a height coming from the stylesheet or the descriptor is not
+	 * a user decision and must not be frozen into storage.
+	 *
+	 * @param {Object} pInput - The input definition object.
+	 * @returns {boolean} True if a height was remembered.
+	 */
+	_captureEditorHeight(pInput)
+	{
+		let tmpSlot = this._getSlotElement(pInput);
+		if (!tmpSlot || !tmpSlot.style || !tmpSlot.style.height) return false;
+		return this._writeStoredHeight(pInput, tmpSlot.style.height);
+	}
+
+	/**
+	 * Watch the slot so a height the user drags to is remembered for next time. The grip is native CSS
+	 * `resize` (no drag handling of our own), so a ResizeObserver is the only signal that it moved.
+	 * Debounced — a drag fires continuously.
+	 *
+	 * @param {Object} pInput - The input definition object.
+	 * @param {Object} pInstance - The instance record to hang the observer off.
+	 */
+	_observeEditorResize(pInput, pInstance)
+	{
+		if (typeof ResizeObserver === 'undefined') return;
+		let tmpSlot = this._getSlotElement(pInput);
+		if (!tmpSlot || pInstance.resizeObserver) return;
+		let tmpProvider = this;
+		pInstance.resizeObserver = new ResizeObserver(() =>
+		{
+			if (pInstance.resizeTimer) clearTimeout(pInstance.resizeTimer);
+			pInstance.resizeTimer = setTimeout(() =>
+			{
+				pInstance.resizeTimer = null;
+				tmpProvider._captureEditorHeight(pInput);
+			}, 300);
+		});
+		try { pInstance.resizeObserver.observe(tmpSlot); }
+		catch (pErr) { pInstance.resizeObserver = null; }
+	}
+
+	/**
+	 * @param {Object} pInstance - The instance record whose resize watcher should be torn down.
+	 */
+	_unobserveEditorResize(pInstance)
+	{
+		if (!pInstance) return;
+		if (pInstance.resizeTimer)
+		{
+			clearTimeout(pInstance.resizeTimer);
+			pInstance.resizeTimer = null;
+		}
+		if (pInstance.resizeObserver)
+		{
+			try { pInstance.resizeObserver.disconnect(); }
+			catch (pErr) { /* already gone */ }
+			pInstance.resizeObserver = null;
 		}
 	}
 
@@ -230,6 +440,7 @@ class PictInputDiagram extends libPictSectionInputExtension
 
 		this._assignSlotContent(tmpSlotID, this._buildViewHTML(tmpValue));
 		this._setSlotModeClass(pInput, 'view');
+		this._clearEditorHeight(pInput);
 
 		let tmpInst = this._instances[pInput.Hash] || {};
 		tmpInst.mode         = 'view';
@@ -299,7 +510,12 @@ class PictInputDiagram extends libPictSectionInputExtension
 			ViewIdentifier:       `Pict-Input-Diagram-Editor-${pInput.Hash}`,
 			TargetElementAddress: this.getContentDisplayHTMLID(tmpRawHTMLID),
 			DrawingDataAddress:   tmpDrawingAddr,
-			EditorImplementation: tmpDiagramOpts.EditorImplementation || 'react'
+			EditorImplementation: tmpDiagramOpts.EditorImplementation || 'react',
+			// Excalidraw picks its UI density from the CONTAINER's box, so an embedded canvas — which is
+			// short by definition — reads as a phone and buries the shape properties behind a popover.
+			// 'pointer' asks the embed to classify by input device instead: desktop chrome for a mouse,
+			// Excalidraw's own detection on a touch screen. See pict-section-excalidraw's FormFactor.
+			FormFactor:           tmpDiagramOpts.FormFactor || 'pointer'
 		});
 
 		return tmpOptions;
@@ -391,6 +607,8 @@ class PictInputDiagram extends libPictSectionInputExtension
 			}
 
 			this._setSlotModeClass(pInput, 'edit');
+			this._applyEditorHeight(pInput);
+			this._observeEditorResize(pInput, tmpInst);
 
 			tmpInst.mode         = 'edit';
 			tmpInst.slotID       = tmpSlotID;
@@ -426,7 +644,14 @@ class PictInputDiagram extends libPictSectionInputExtension
 	_destroyEdit(pInput)
 	{
 		let tmpInst = this._instances[pInput.Hash];
-		if (!tmpInst || !tmpInst.viewInstance) return;
+		if (!tmpInst) return;
+		// Capture BEFORE teardown: ResizeObserver is frame-driven and never fires in a backgrounded or
+		// headless context, so closing the editor is the one commit point we can rely on.
+		this._captureEditorHeight(pInput);
+		// Ahead of the viewInstance guard — a slot can be watched without a live editor view (a mount
+		// that failed part way), and a leaked ResizeObserver would keep the detached slot alive.
+		this._unobserveEditorResize(tmpInst);
+		if (!tmpInst.viewInstance) return;
 
 		let tmpView = tmpInst.viewInstance;
 		try

@@ -56,28 +56,43 @@ module.exports = /*css*/`
 	height: auto;
 }
 
+/* Open-editor sizing.
+ *
+ * The height is a variable so the provider can drive it from the descriptor's Diagram.Height (and
+ * from a height the user dragged to) without inlining a whole style block. The default clears
+ * Excalidraw's own 500px "this is a phone" breakpoint AND leaves the shape-properties island room to
+ * render unscrolled — below that the island is clipped to a scrolling sliver and the property
+ * buttons become miserable to hit.
+ *
+ * The resize:vertical rule is the drag grip, the same affordance a textarea has; it needs a
+ * non-visible overflow to show up at all. The floor is deliberately a small absolute value rather than the
+ * configured height, or the grip could not drag below whatever the field was configured to. */
 .pict-section-form-diagram-edit
 {
 	padding: 0;
-	min-height: 420px;
+	height: var(--pict-diagram-height, 560px);
+	min-height: 180px;
 	display: flex;
+	resize: vertical;
+	overflow: hidden;
 }
 
-/* The Excalidraw view brings its own chrome inside the slot. Force the wrap
- * and the Excalidraw root to fill so the canvas doesn't collapse to 0
- * height inside the form slot. */
+/* The Excalidraw view brings its own chrome inside the slot. Force the wrap and the Excalidraw root
+ * to FILL rather than to floor: a min-height in here would fight the grip on the way down and pin
+ * the canvas taller than the box the user just dragged. */
 .pict-section-form-diagram-edit > .pict-excalidraw-wrap,
 .pict-section-form-diagram-edit > .pict-excalidraw-wrap > .pict-excalidraw-mount
 {
 	flex: 1 1 auto;
-	min-height: 420px;
+	min-height: 0;
+	height: 100%;
 }
 
 .pict-section-form-diagram-edit .excalidraw
 {
 	width: 100%;
 	height: 100%;
-	min-height: 420px;
+	min-height: 0;
 }
 
 .pict-section-form-diagram-toggle
