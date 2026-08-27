@@ -45,7 +45,8 @@ pict.addProvider(
       "InputType": "Diagram",
       "Diagram": {
         "ThemeColors":          true,
-        "Height":               "480px",
+        "Height":               "640px",
+        "FormFactor":           "pointer",
         "EditorImplementation": "react"
       }
     }
@@ -72,7 +73,37 @@ so the SVG re-opens cleanly in any Excalidraw-aware viewer.
 
 ### Height
 
-CSS string applied to the slot when the field is in edit mode.
+Starting height of the canvas while the field is in **edit mode**. A CSS length
+(`"640px"`, `"40rem"`) or a bare number, which is read as pixels (`640` and
+`"640"` both mean `640px`). Defaults to `560px`.
+
+Height is worth setting deliberately, because Excalidraw scales its own UI to
+the box it is given: below roughly 500px it decides it is on a phone and folds
+the shape properties away behind a popover, and the left-hand properties island
+starts to clip into a scrolling sliver. `560px` is the smallest height that
+avoids both.
+
+Users can also drag the bottom-right grip to resize the canvas (the same
+affordance a `textarea` has). A height they drag to is remembered per field in
+`localStorage` and wins over `Height` on the next open; the field falls back to
+`Height` wherever storage is unavailable. Read and Print themes are unaffected —
+they render the static SVG at its natural size.
+
+### FormFactor
+
+How Excalidraw should classify the editor when picking how dense its UI is.
+
+| Value | Behaviour |
+|---|---|
+| `"pointer"` *(default)* | Desktop chrome on a mouse; Excalidraw's own answer on a touch screen. |
+| `"auto"` | Excalidraw decides, from the size of the container. |
+| `"desktop"` / `"tablet"` / `"phone"` | Pin it. |
+
+Excalidraw's own detection reads the **container's** box — right for
+excalidraw.com, where the container is the viewport, and wrong for a form field,
+where a 560px-tall box on a 27" monitor is not a phone. `"pointer"` classifies
+by input device instead, so the full properties island stays put at any field
+width. Set `"auto"` to opt back out.
 
 ### EditorImplementation
 
