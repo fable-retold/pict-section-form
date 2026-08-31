@@ -452,6 +452,76 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 	}
 
 	/**
+	 * Re-render a single group in place, leaving the rest of the section's DOM untouched.
+	 *
+	 * The section template is one string (wrap/section prefixes + every group's
+	 * generateGroupLayoutTemplate + postfixes), so a normal render rebuilds all of it.
+	 * This regenerates just the requested group's slice and swaps that one element.
+	 *
+	 * Init is then run the normal way (the view's own post-render pass) rather than being
+	 * hand-scoped: input providers guard their own re-initialization (a select2 picker
+	 * checks for an existing instance before creating one), so untouched groups no-op and
+	 * only the freshly-rendered group actually initializes.
+	 *
+	 * @param {import('../views/Pict-View-DynamicForm.js')} pView - The section view.
+	 * @param {string} pGroupHash - The group to re-render.
+	 * @return {boolean} - True if the group was rendered in place; false to fall back to a full render.
+	 */
+	renderGroupInPlace(pView, pGroupHash)
+	{
+		try
+		{
+			if (!pView || !pView.formID || (typeof pView.getGroupIndexFromHash !== 'function'))
+			{
+				return false;
+			}
+			const tmpGroupIndex = pView.getGroupIndexFromHash(pGroupHash);
+			if (tmpGroupIndex < 0)
+			{
+				return false;
+			}
+			const tmpGroup = pView.getGroup(tmpGroupIndex);
+			const tmpGenerator = this.pict.providers.MetatemplateGenerator;
+			if (!tmpGroup || !tmpGenerator || (typeof tmpGenerator.getGroupLayoutProvider !== 'function'))
+			{
+				return false;
+			}
+			const tmpLayout = tmpGenerator.getGroupLayoutProvider(pView, tmpGroup);
+			if (!tmpLayout || (typeof tmpLayout.generateGroupLayoutTemplate !== 'function'))
+			{
+				return false;
+			}
+			const tmpElements = this.pict.ContentAssignment.getElement(`#GROUP-${pView.formID}-${tmpGroup.Hash}`);
+			const tmpElement = (tmpElements && tmpElements.length) ? tmpElements[0] : null;
+			if (!tmpElement || (typeof tmpElement.outerHTML !== 'string'))
+			{
+				return false;
+			}
+
+			// Same parse shape the view uses for the whole section: the view is Context[0],
+			// which the group templates reference for formID/UUID/Hash.
+			const tmpTemplateHash = `Pict-Form-Template-Group-InPlace-${pView.options.Hash}-G${tmpGroup.GroupIndex}`;
+			this.pict.TemplateProvider.addTemplate(tmpTemplateHash, tmpLayout.generateGroupLayoutTemplate(pView, tmpGroup));
+			const tmpRecordAddress = pView.options.DefaultTemplateRecordAddress;
+			const tmpRecord = (typeof tmpRecordAddress === 'string') ? this.pict.DataProvider.getDataByAddress(tmpRecordAddress) : undefined;
+			const tmpContent = this.pict.parseTemplateByHash(tmpTemplateHash, tmpRecord, null, [ pView ]);
+			if (typeof tmpContent !== 'string' || !tmpContent.length)
+			{
+				return false;
+			}
+
+			tmpElement.outerHTML = tmpContent;
+			pView.onAfterRender({ RenderableHash: `GroupInPlace-${tmpGroup.Hash}` });
+			return true;
+		}
+		catch (pError)
+		{
+			this.log.warn(`renderGroupInPlace failed for group [${pGroupHash}]; falling back to a full section render: ${pError.message || pError}`);
+			return false;
+		}
+	}
+
+	/**
 	 * Causes a tabular section to refresh its display
 	 *
 	 * @param {string} pSectionHash - The hash of the section containing the tabular group
@@ -501,7 +571,15 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			// We expect this view to be in the set.
 			for (let i = 0; i < tmpViewsToRender.length; i++)
 			{
-				tmpViewsToRender[i].render();
+				// Re-render ONLY the group that actually changed when we can. A full
+				// section render replaces every group's DOM, which destroys any widget
+				// the user is mid-interaction with (select2 pickers blank for ~700ms) and
+				// drops layout state. Falls back to the full render when the group-scoped
+				// path is not possible, so behaviour is unchanged for anything it cannot handle.
+				if (!this.renderGroupInPlace(tmpViewsToRender[i], pGroupHash))
+				{
+					tmpViewsToRender[i].render();
+				}
 			}
 
 			//NOTE: not running a solve, since this is run from the solver; if you need a solve, call runSolvers()
