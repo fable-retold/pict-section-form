@@ -50,6 +50,14 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 		this.sectionVisibilityState = {};
 		/** @type {Record<string, boolean>} */
 		this.groupVisibilityState = {};
+
+		// Same story for every solver that decorates the DOM -- highlight classes and inline background
+		// colors all land on markup the section template regenerates. Keyed by what the decoration
+		// targets so re-applying one overwrites rather than accumulating.
+		/** @type {Record<string, {Section: string, Method: string, Arguments: Array<any>}>} */
+		this.decorationState = {};
+		/** @type {boolean} */
+		this.decorationReplayInProgress = false;
 		/** @type {string} */
 		this.cssTabularRowHighlightClass = 'pict-tabular-row-highlight';
 		/** @type {string} */
@@ -519,6 +527,77 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 	}
 
 	/**
+	 * Remember a DOM decoration a solver just applied so it can be replayed after a render.
+	 *
+	 * @param {string} pSectionHash - The section the decoration targets.
+	 * @param {string} pKey - Stable identity for what is decorated; a repeat overwrites it.
+	 * @param {string} pMethod - The method on this provider that applies it.
+	 * @param {Array<any>} pArguments - The arguments to replay it with.
+	 *
+	 * @return {void}
+	 */
+	recordDecoration(pSectionHash, pKey, pMethod, pArguments)
+	{
+		if (this.decorationReplayInProgress)
+		{
+			return;
+		}
+		this.decorationState[`${pSectionHash}::${pKey}`] = { Section: pSectionHash, Method: pMethod, Arguments: pArguments };
+	}
+
+	/**
+	 * Replay every decoration recorded against a section after a render repainted its markup.
+	 *
+	 * Highlight classes and inline colors live on rows, cells and containers that the section
+	 * template regenerates, exactly like the hide classes. Replay is idempotent: each entry is
+	 * keyed by its target, and a recorded "remove" simply re-runs a removal against fresh markup.
+	 *
+	 * @param {string} pSectionHash - The section that was just rendered.
+	 *
+	 * @return {void}
+	 */
+	reapplySectionDecorations(pSectionHash)
+	{
+		if (typeof pSectionHash !== 'string' || pSectionHash.length < 1)
+		{
+			return;
+		}
+
+		const tmpKeys = Object.keys(this.decorationState);
+		this.decorationReplayInProgress = true;
+		try
+		{
+			for (let i = 0; i < tmpKeys.length; i++)
+			{
+				const tmpEntry = this.decorationState[tmpKeys[i]];
+				if (!tmpEntry || (tmpEntry.Section !== pSectionHash) || (typeof this[tmpEntry.Method] !== 'function'))
+				{
+					continue;
+				}
+				this[tmpEntry.Method].apply(this, tmpEntry.Arguments);
+			}
+		}
+		finally
+		{
+			this.decorationReplayInProgress = false;
+		}
+	}
+
+	/**
+	 * Restore everything a solver put on this section's DOM that a render just wiped -- visibility
+	 * first, then decorations. This is what the section view calls from its own onAfterRender.
+	 *
+	 * @param {string} pSectionHash - The section that was just rendered.
+	 *
+	 * @return {void}
+	 */
+	reapplySectionDOMState(pSectionHash)
+	{
+		this.reapplySectionVisibility(pSectionHash);
+		this.reapplySectionDecorations(pSectionHash);
+	}
+
+	/**
 	 * Re-render a single group in place, leaving the rest of the section's DOM untouched.
 	 *
 	 * The section template is one string (wrap/section prefixes + every group's
@@ -746,6 +825,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return true;
 		}
 
+		this.recordDecoration(pSectionHash, 'sectionbackground', 'colorSectionBackground', [ pSectionHash, pColor, pApplyChange ]);
+
 		let tmpSectionView = this.pict.views.PictFormMetacontroller.getSectionViewFromHash(pSectionHash)
 		if (!tmpSectionView)
 		{
@@ -774,6 +855,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 		{
 			return true;
 		}
+
+		this.recordDecoration(pSectionHash, `${pGroupHash}::groupbackground`, 'colorGroupBackground', [ pSectionHash, pGroupHash, pColor, pApplyChange ]);
 
 		let tmpGroupView = this.pict.views.PictFormMetacontroller.getSectionViewFromHash(pSectionHash)
 		if (!tmpGroupView)
@@ -811,6 +894,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 		{
 			return true;
 		}
+
+		this.recordDecoration(pSectionHash, `input::${pInputHash}`, 'colorInputBackground', [ pSectionHash, pInputHash, pColor, pApplyChange, pCSSSelector ]);
 
 		/** @type {import('../views/Pict-View-DynamicForm.js')} */
 		let tmpInputView = this.pict.views.PictFormMetacontroller.getSectionViewFromHash(pSectionHash);
@@ -863,6 +948,9 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 		{
 			return true;
 		}
+
+		this.recordDecoration(pSectionHash, `${pGroupHash}::inputcell::${pInputHash}::${pRowIndex}`, 'colorInputBackgroundTabular',
+			[ pSectionHash, pGroupHash, pInputHash, pRowIndex, pColor, pApplyChange, pCSSSelector, pElementIDPrefix ]);
 
 		/** @type {import('../views/Pict-View-DynamicForm.js')} */
 		let tmpInputView = this.pict.views.PictFormMetacontroller.getSectionViewFromHash(pSectionHash);
@@ -1007,6 +1095,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 		let tmpClass = (typeof pHighlightClass === 'string' && pHighlightClass.length > 0) ? pHighlightClass : this.cssTabularRowHighlightClass;
+		this.recordDecoration(pSectionHash, `${pGroupHash}::row::${pRowIndex}::${tmpClass}`, 'highlightTabularRow',
+			[ pSectionHash, pGroupHash, pRowIndex, pApplyFlag, pHighlightClass ]);
 		let tmpRowSelector = `${tmpGroupSelector} tr[data-tabular-row-index="${pRowIndex}"]`;
 		if (this.isSolverFlagEnabled(pApplyFlag))
 		{
@@ -1039,6 +1129,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 		let tmpClass = (typeof pHighlightClass === 'string' && pHighlightClass.length > 0) ? pHighlightClass : this.cssTabularColumnHighlightClass;
+		this.recordDecoration(pSectionHash, `${pGroupHash}::column::${pColumnIndex}::${tmpClass}`, 'highlightTabularColumn',
+			[ pSectionHash, pGroupHash, pColumnIndex, pApplyFlag, pHighlightClass ]);
 		let tmpColumnSelector = `${tmpGroupSelector} [data-tabular-column-index="${pColumnIndex}"]`;
 		if (this.isSolverFlagEnabled(pApplyFlag))
 		{
@@ -1073,6 +1165,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 		let tmpApply = this.isSolverFlagEnabled(pApplyFlag) && (typeof pColor === 'string') && (pColor.length > 0);
+		this.recordDecoration(pSectionHash, `${pGroupHash}::rowcolor::${pRowIndex}`, 'colorTabularRow',
+			[ pSectionHash, pGroupHash, pRowIndex, pColor, pApplyFlag ]);
 		let tmpElementSet = this.pict.ContentAssignment.getElement(`${tmpGroupSelector} tr[data-tabular-row-index="${pRowIndex}"] td`);
 		for (let i = 0; i < tmpElementSet.length; i++)
 		{
@@ -1107,6 +1201,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 		let tmpApply = this.isSolverFlagEnabled(pApplyFlag) && (typeof pColor === 'string') && (pColor.length > 0);
+		this.recordDecoration(pSectionHash, `${pGroupHash}::columncolor::${pColumnIndex}`, 'colorTabularColumn',
+			[ pSectionHash, pGroupHash, pColumnIndex, pColor, pApplyFlag ]);
 		let tmpElementSet = this.pict.ContentAssignment.getElement(`${tmpGroupSelector} [data-tabular-column-index="${pColumnIndex}"]`);
 		for (let i = 0; i < tmpElementSet.length; i++)
 		{

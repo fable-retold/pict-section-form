@@ -33,5 +33,11 @@ npx quack examples
 same way — tick `Show Gradation` first so the section is visible, then rename a product. The group has to
 live inside a section that actually re-renders; a group in an untouched section is never regenerated.
 
+`Flag the #200 Row` covers the same defect one layer down. `highlighttabularrow` puts a class on a `<tr>`
+that the same render regenerates, so the highlight was dropped too. Every DOM-decorating solver — the
+highlight pair, the tabular row/column colors, and the section/group/input background colors — shares this
+and is restored by the same replay. `MI-BatchSheetCombined` calls `highlighttabularrow(…, "is-hidden")` to
+hide rows inside its CSB tables, so there the symptom is a hidden row coming back.
+
 Reported against a Headlight combined form (`MI-BatchSheetCombined`), where picking a Source/Name on
 the Aggregate Products table un-hid every CSB worksheet generated from it.

@@ -59,10 +59,11 @@
 					<li>On load, <strong>Average Gradation</strong> is hidden &mdash; <code>Show Gradation</code> is unchecked and the section solver hid it.</li>
 					<li>Rename any product in <strong>Aggregate Products</strong> and tab out. That changes a generated column <em>label</em>, so every section whose columns come from Products re-renders.</li>
 					<li>For the <em>group</em> equivalent: tick <code>Show Gradation</code> so the section is visible, leave <code>Show Notes</code> unchecked, and rename a product again &mdash; the hidden <strong>Gradation Notes</strong> group inside it behaves the same way.</li>
+					<li>For the <em>row</em> equivalent: with Gradation visible, tick <code>Flag the #200 Row</code> to highlight it, then rename a product once more.</li>
 				</ol>
 				<p class="pict-example-expect">
-					<span class="pict-example-bad">Broken:</span> Average Gradation (or the Gradation Notes group) reappears with its box still unchecked.<br>
-					<span class="pict-example-good">Fixed:</span> it stays hidden, and its column headers still pick up the new product name &mdash; check the box to confirm the labels updated underneath.
+					<span class="pict-example-bad">Broken:</span> Average Gradation (or the Gradation Notes group) reappears with its box still unchecked, and the row highlight vanishes.<br>
+					<span class="pict-example-good">Fixed:</span> everything stays as you left it &mdash; hidden stays hidden, the flagged row stays flagged &mdash; and the column headers still pick up the new product name.
 				</p>
 			</div>
 			<div id="Pict-Form-Container"></div>

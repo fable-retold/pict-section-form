@@ -15,6 +15,10 @@
 
 	The "Gradation Notes" group inside that section is the group-level equivalent: tick Show
 	Gradation so the section is visible, leave Show Notes unchecked, then rename a product.
+
+	"Flag the #200 Row" covers the same defect one layer down: highlighttabularrow puts a class on
+	a <tr> that the very same render regenerates. MI-BatchSheetCombined uses that solver with
+	"is-hidden" to hide rows inside its CSB tables, so there the symptom is a hidden row coming back.
 */
 const libPictSectionForm = require('../../source/Pict-Section-Form.js');
 
@@ -40,7 +44,8 @@ module.exports.default_configuration.pict_configuration = (
 					"Solvers":
 					[
 						"SetSectionVisibility(\"Gradation\", IF(ShowGradation, \"==\", 1, 1, 0))",
-						"SetGroupVisibility(\"Gradation\", \"GradationNotes\", IF(ShowNotes, \"==\", 1, 1, 0))"
+						"SetGroupVisibility(\"Gradation\", \"GradationNotes\", IF(ShowNotes, \"==\", 1, 1, 0))",
+						"highlighttabularrow(\"Gradation\", \"Gradation\", 3, IF(FlagFinesRow, \"==\", 1, 1, 0))"
 					],
 
 					"Groups": [ { "Hash": "Workflow", "Name": "Show / Hide Worksheets" } ]
@@ -109,6 +114,14 @@ module.exports.default_configuration.pict_configuration = (
 					"DataType": "Boolean",
 					"Default": 0,
 					"PictForm": { "InputType": "Boolean", "Section": "Workflow", "Group": "Workflow", "Row": 1 }
+				},
+				"Workflow.FlagFinesRow":
+				{
+					"Name": "Flag the #200 Row",
+					"Hash": "FlagFinesRow",
+					"DataType": "Boolean",
+					"Default": 0,
+					"PictForm": { "InputType": "Boolean", "Section": "Workflow", "Group": "Workflow", "Row": 2 }
 				},
 				"Workflow.ShowNotes":
 				{

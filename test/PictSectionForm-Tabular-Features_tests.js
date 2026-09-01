@@ -804,6 +804,98 @@ suite('PictSectionForm Tabular Features', () =>
 			}, fDone);
 		});
 
+		/*
+			Highlight classes and inline colors land on rows and cells the section template regenerates,
+			so they die on the same renders the hide class did. MI-BatchSheetCombined hides rows inside
+			its CSB tables with highlighttabularrow(..., "is-hidden"), which is the same defect one layer
+			down: the row would come back visible on a Source/Name change.
+		*/
+		test('A tabular row highlight survives a DynamicColumns re-render', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				let fRow = () => document.querySelector(`#GROUP-${tmpView.formID}-Grades tr[data-tabular-row-index="1"]`);
+
+				paintView(tmpView);
+				Expect(fRow()).to.not.equal(null, 'the row painted');
+
+				tmpBehaviors.highlightTabularRow('Class', 'Grades', 1, 1, 'is-flagged');
+				Expect(fRow().className).to.contain('is-flagged', 'baseline: row highlighted');
+
+				_Pict.AppData.Assignments[0].Title = 'Renamed';
+				_Pict.providers['Pict-Layout-Tabular'].onDataMarshalToForm(tmpView, tmpGroup);
+
+				Expect(fRow()).to.not.equal(null, 'the row re-painted');
+				Expect(fRow().className).to.contain('is-flagged', 'the highlight survived the re-render');
+			}, fDone);
+		});
+
+		test('A highlight that was turned back off stays off across a re-render', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				let fRow = () => document.querySelector(`#GROUP-${tmpView.formID}-Grades tr[data-tabular-row-index="1"]`);
+
+				paintView(tmpView);
+				tmpBehaviors.highlightTabularRow('Class', 'Grades', 1, 1, 'is-flagged');
+				tmpBehaviors.highlightTabularRow('Class', 'Grades', 1, 0, 'is-flagged');
+
+				_Pict.AppData.Assignments[0].Title = 'Renamed';
+				_Pict.providers['Pict-Layout-Tabular'].onDataMarshalToForm(tmpView, tmpGroup);
+
+				Expect(fRow().className).to.not.contain('is-flagged', 'a cleared highlight must not come back');
+			}, fDone);
+		});
+
+		test('Re-highlighting the same row does not accumulate registry entries', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				paintView(tmpView);
+
+				for (let i = 0; i < 5; i++)
+				{
+					tmpBehaviors.highlightTabularRow('Class', 'Grades', 1, 1, 'is-flagged');
+				}
+				let tmpKeys = Object.keys(tmpBehaviors.decorationState).filter((pKey) => pKey.indexOf('Class::Grades::row::1::is-flagged') === 0);
+				Expect(tmpKeys.length).to.equal(1, 'keyed by target, so repeats overwrite');
+			}, fDone);
+		});
+
+		test('Decorations recorded against another section are not replayed here', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				paintView(tmpView);
+
+				let tmpCalls = [];
+				let tmpOriginal = tmpBehaviors.highlightTabularRow;
+				tmpBehaviors.decorationState['SomeOtherSection::Grid::row::0::is-flagged'] =
+					{ Section: 'SomeOtherSection', Method: 'highlightTabularRow', Arguments: [ 'SomeOtherSection', 'Grid', 0, 1, 'is-flagged' ] };
+				tmpBehaviors.highlightTabularRow = function () { tmpCalls.push(Array.from(arguments)); return true; };
+				try
+				{
+					tmpBehaviors.reapplySectionDecorations('Class');
+				}
+				finally
+				{
+					tmpBehaviors.highlightTabularRow = tmpOriginal;
+				}
+
+				Expect(tmpCalls.length).to.equal(0, 'replay is scoped to the rendered section');
+			}, fDone);
+		});
+
 		test('A section with no recorded visibility is left exactly as the template rendered it', (fDone) =>
 		{
 			bootstrap(makeVisibilityApp(), (_Pict) =>
