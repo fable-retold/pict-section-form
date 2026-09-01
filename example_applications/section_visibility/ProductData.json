@@ -1,0 +1,21 @@
+{
+	"Workflow":
+	{
+		"ShowGradation": 0
+	},
+
+	"Products":
+	[
+		{ "IDProduct": 1, "ProductName": "Limestone 3/4\"" },
+		{ "IDProduct": 2, "ProductName": "Natural Sand" },
+		{ "IDProduct": 3, "ProductName": "RAP" }
+	],
+
+	"Gradation":
+	[
+		{ "SieveSize": "1/2\"", "Passing": { "1": 100, "2": 100, "3": 98 } },
+		{ "SieveSize": "#4",    "Passing": { "1": 42,  "2": 96,  "3": 71 } },
+		{ "SieveSize": "#8",    "Passing": { "1": 22,  "2": 84,  "3": 55 } },
+		{ "SieveSize": "#200",  "Passing": { "1": 1.8, "2": 4.2, "3": 6.1 } }
+	]
+}
