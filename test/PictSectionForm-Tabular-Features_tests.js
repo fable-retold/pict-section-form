@@ -696,6 +696,133 @@ suite('PictSectionForm Tabular Features', () =>
 			}, fDone);
 		});
 
+		/*
+			The <section> and <div> that carry a section's and a group's hide class are emitted BY the
+			section template, so every render regenerates them without whatever setsectionvisibility /
+			setgroupvisibility applied. Solvers run BEFORE the marshal that triggers a DynamicColumns
+			re-render, so nothing put it back: a hidden section silently reappeared the moment a source
+			row was renamed (reported on MI-BatchSheetCombined -- picking a Source/Name on the Aggregate
+			Products table un-hid the CSB worksheets whose columns are generated from it).
+		*/
+		function makeVisibilityApp()
+		{
+			return makeApplication({
+				Hash: 'Grades',
+				Layout: 'Tabular',
+				RecordSetAddress: 'Grades',
+				RecordManifest: 'GradeRowEditor',
+				DynamicColumns:
+				[
+					{
+						SourceAddress: 'Assignments',
+						HashTemplate: 'Grade_{~D:Record.IDAssignment~}',
+						NameTemplate: '{~D:Record.Title~}',
+						InformaryDataAddressTemplate: 'Grades.{~D:Record.IDAssignment~}',
+						DataType: 'Number',
+						PictForm: { InputType: 'Number' }
+					}
+				]
+			});
+		}
+
+		// Paint the view into a real destination element so #SECTION-<formID> exists to assert on.
+		function paintView(pView)
+		{
+			document.body.innerHTML = `<div id="${String(pView.options.DefaultDestinationAddress).replace(/^#/, '')}"></div>`;
+			pView.render();
+		}
+
+		test('A hidden section STAYS hidden across a DynamicColumns re-render', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				let fSection = () => document.querySelector(`#SECTION-${tmpView.formID}`);
+
+				paintView(tmpView);
+				Expect(fSection()).to.not.equal(null, 'the section painted');
+
+				tmpBehaviors.hideSection('Class');
+				Expect(fSection().className).to.contain('pict-section-form-hidden-section', 'baseline: section hidden');
+
+				// Rename a source row: namesChanged, so the Tabular layout re-renders the section mid-marshal.
+				_Pict.AppData.Assignments[0].Title = 'Renamed';
+				_Pict.providers['Pict-Layout-Tabular'].onDataMarshalToForm(tmpView, tmpGroup);
+
+				Expect(tmpGroup.supportingManifest.elementDescriptors['Grade_1'].Name).to.equal('Renamed',
+					'the re-render did happen (header label re-baked)');
+				Expect(fSection()).to.not.equal(null, 'the section re-painted');
+				Expect(fSection().className).to.contain('pict-section-form-hidden-section',
+					'the hide class survived the DynamicColumns re-render');
+			}, fDone);
+		});
+
+		test('A section shown again STAYS visible across a DynamicColumns re-render', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				let fSection = () => document.querySelector(`#SECTION-${tmpView.formID}`);
+
+				paintView(tmpView);
+				tmpBehaviors.hideSection('Class');
+				tmpBehaviors.showSection('Class');
+
+				_Pict.AppData.Assignments[0].Title = 'Renamed';
+				_Pict.providers['Pict-Layout-Tabular'].onDataMarshalToForm(tmpView, tmpGroup);
+
+				Expect(fSection().className).to.not.contain('pict-section-form-hidden-section',
+					'a re-shown section must not be re-hidden by the restore');
+			}, fDone);
+		});
+
+		test('A hidden GROUP stays hidden across renderGroupInPlace', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				let fGroup = () => document.querySelector(`#GROUP-${tmpView.formID}-Grades`);
+
+				paintView(tmpView);
+				Expect(fGroup()).to.not.equal(null, 'the group painted');
+
+				tmpBehaviors.hideGroup('Class', 'Grades');
+				Expect(fGroup().className).to.contain('pict-section-form-hidden-group', 'baseline: group hidden');
+
+				// renderGroupInPlace swaps the group element's outerHTML for freshly parsed template
+				// output, which carries only the manifest CSSClass -- the hide class has to be restored.
+				Expect(tmpBehaviors.renderGroupInPlace(tmpView, 'Grades')).to.equal(true, 'scoped render ran');
+
+				Expect(fGroup()).to.not.equal(null, 'the group re-painted');
+				Expect(fGroup().className).to.contain('pict-section-form-hidden-group',
+					'the group hide class survived the in-place group render');
+			}, fDone);
+		});
+
+		test('A section with no recorded visibility is left exactly as the template rendered it', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let fSection = () => document.querySelector(`#SECTION-${tmpView.formID}`);
+
+				paintView(tmpView);
+				let tmpBaseline = fSection().className;
+
+				_Pict.AppData.Assignments[0].Title = 'Renamed';
+				_Pict.providers['Pict-Layout-Tabular'].onDataMarshalToForm(tmpView, tmpGroup);
+
+				Expect(fSection().className).to.equal(tmpBaseline,
+					'forms that never call the visibility solvers are untouched');
+			}, fDone);
+		});
+
 		test('Steady-state re-run reports neither changed nor namesChanged', (fDone) =>
 		{
 			let App = makeApplication({

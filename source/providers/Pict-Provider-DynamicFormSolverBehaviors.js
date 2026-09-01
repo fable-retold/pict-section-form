@@ -42,6 +42,14 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 		/** @type {string} */
 		this.cssHideSectionClass = 'pict-section-form-hidden-section';
 		this.cssHideGroupClass = 'pict-section-form-hidden-group';
+
+		// #SECTION-<formID> and #GROUP-<formID>-<hash> are both emitted by the section template, so a
+		// render() regenerates them without the hide class and the hide silently reverts. Record what
+		// was asked for so reapplySectionVisibility can restore it after a render.
+		/** @type {Record<string, boolean>} */
+		this.sectionVisibilityState = {};
+		/** @type {Record<string, boolean>} */
+		this.groupVisibilityState = {};
 		/** @type {string} */
 		this.cssTabularRowHighlightClass = 'pict-tabular-row-highlight';
 		/** @type {string} */
@@ -367,6 +375,10 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 
+		// Record BEFORE the DOM guard below: the guard short-circuits when the DOM already matches, and
+		// the state map has to stay accurate even then so a later render can restore it.
+		this.sectionVisibilityState[pSectionHash] = false;
+
 		if (this.pict.ContentAssignment.hasClass(this.getSectionSelector(tmpSectionView.formID), this.cssHideSectionClass))
 		{
 			// Already hidden.
@@ -385,6 +397,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			this.log.warn(`PictDynamicFormsInformary: showSection could not find section with hash [${pSectionHash}].`);
 			return false;
 		}
+
+		this.sectionVisibilityState[pSectionHash] = true;
 
 		if (!this.pict.ContentAssignment.hasClass(this.getSectionSelector(tmpSectionView.formID), this.cssHideSectionClass))
 		{
@@ -422,6 +436,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 
+		this.groupVisibilityState[this.getGroupVisibilityStateKey(pSectionHash, pGroupHash)] = false;
+
 		if (this.pict.ContentAssignment.hasClass(this.getGroupSelector(tmpGroupView.formID, pGroupHash), this.cssHideGroupClass))
 		{
 			// Already hidden.
@@ -441,6 +457,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 
+		this.groupVisibilityState[this.getGroupVisibilityStateKey(pSectionHash, pGroupHash)] = true;
+
 		if (!this.pict.ContentAssignment.hasClass(this.getGroupSelector(tmpGroupView.formID, pGroupHash), this.cssHideGroupClass))
 		{
 			// Already visible.
@@ -449,6 +467,55 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 
 		this.pict.ContentAssignment.removeClass(this.getGroupSelector(tmpGroupView.formID, pGroupHash), this.cssHideGroupClass);
 		return true;
+	}
+
+	/**
+	 * @param {string} pSectionHash
+	 * @param {string} pGroupHash
+	 *
+	 * @return {string} - The groupVisibilityState key for a section/group pair.
+	 */
+	getGroupVisibilityStateKey(pSectionHash, pGroupHash)
+	{
+		return `${pSectionHash}::${pGroupHash}`;
+	}
+
+	/**
+	 * Re-apply a section's recorded visibility (and that of its groups) after a render regenerated its DOM.
+	 *
+	 * Every render path -- DynamicColumns rebuild, dependent-view rebuild, row add/delete/move, the
+	 * group-scoped swap in renderGroupInPlace -- repaints those elements with only their manifest
+	 * CSSClass, and solvers run BEFORE the marshal that triggers them, so nothing else puts the hide
+	 * back. Called from the view's onAfterRender so one restore covers them all. A section with no
+	 * recorded state is left as the template rendered it.
+	 *
+	 * @param {string} pSectionHash - The section that was just rendered.
+	 *
+	 * @return {void}
+	 */
+	reapplySectionVisibility(pSectionHash)
+	{
+		if (typeof pSectionHash !== 'string' || pSectionHash.length < 1)
+		{
+			return;
+		}
+
+		if (pSectionHash in this.sectionVisibilityState)
+		{
+			this.setSectionVisibility(pSectionHash, this.sectionVisibilityState[pSectionHash] ? 1 : 0);
+		}
+
+		const tmpGroupKeyPrefix = `${pSectionHash}::`;
+		const tmpGroupKeys = Object.keys(this.groupVisibilityState);
+		for (let i = 0; i < tmpGroupKeys.length; i++)
+		{
+			if (tmpGroupKeys[i].indexOf(tmpGroupKeyPrefix) !== 0)
+			{
+				continue;
+			}
+			const tmpGroupHash = tmpGroupKeys[i].substring(tmpGroupKeyPrefix.length);
+			this.setGroupVisibility(pSectionHash, tmpGroupHash, this.groupVisibilityState[tmpGroupKeys[i]] ? 1 : 0);
+		}
 	}
 
 	/**

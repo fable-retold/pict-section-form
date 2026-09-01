@@ -684,6 +684,15 @@ class PictViewDynamicForm extends libPictViewClass
 		{
 			this.finalizeTransaction(tmpTransactionGUID);
 		}
+
+		// The render that just happened rebuilt this section's own #SECTION / #GROUP elements without
+		// whatever hide class setsectionvisibility / setgroupvisibility applied, and solvers run before
+		// the marshal that triggers most renders -- so restore it here, once, for every render path.
+		if (this.pict.providers.DynamicFormSolverBehaviors && this.sectionDefinition)
+		{
+			this.pict.providers.DynamicFormSolverBehaviors.reapplySectionVisibility(this.sectionDefinition.Hash);
+		}
+
 		return super.onAfterRender(pRenderable);
 	}
 
