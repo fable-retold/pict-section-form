@@ -1,0 +1,34 @@
+{
+    "name": "section_visibility_application",
+    "version": "1.0.0",
+    "description": "Section visibility survives a DynamicColumns re-render.",
+    "main": "Section-Visibility-Application.js",
+    "scripts": {
+        "start": "node Section-Visibility-Application.js",
+        "build": "npx quack build && npx quack copy"
+    },
+    "author": "steven",
+    "license": "MIT",
+    "devDependencies": {},
+    "copyFilesSettings": {
+        "whenFileExists": "overwrite"
+    },
+    "copyFiles": [
+        {
+            "from": "./html/*",
+            "to": "./dist/"
+        },
+        {
+            "from": "../../node_modules/pict/dist/*",
+            "to": "./dist/"
+        }
+    ],
+    "retold": {
+        "ExampleApplication": {
+            "Stage": true,
+            "Title": "Section Visibility",
+            "Summary": "A regression harness for solver-driven section and group visibility surviving a DynamicColumns re-render. Renaming a source row re-renders every dependent table; the hide class lives on an element that render regenerates, so it used to be silently dropped.",
+            "Complexity": "Basic"
+        }
+    }
+}

@@ -44,6 +44,13 @@ A more complex tabular form example that uses the fruit data again
 and performs mathematical solves across each row, and aggregation
 functions down.  Single file, all configuration, no code.
 
+### Section Visibility
+
+A regression harness for solver-driven section and group visibility. Renaming
+a product re-renders every table whose columns are generated from it; the hide
+class lives on an element that render regenerates, so it used to be dropped.
+Single file, all configuration.
+
 ## Advanced
 
 ### Postcard
@@ -66,6 +73,7 @@ gradebook
 manifest_testbed
 manyfest_editor
 postcard_example
+section_visibility
 simple_form
 simple_table
 simple_table_from_object

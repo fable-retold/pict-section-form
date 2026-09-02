@@ -696,6 +696,225 @@ suite('PictSectionForm Tabular Features', () =>
 			}, fDone);
 		});
 
+		/*
+			The <section> and <div> that carry a section's and a group's hide class are emitted BY the
+			section template, so every render regenerates them without whatever setsectionvisibility /
+			setgroupvisibility applied. Solvers run BEFORE the marshal that triggers a DynamicColumns
+			re-render, so nothing put it back: a hidden section silently reappeared the moment a source
+			row was renamed (reported on MI-BatchSheetCombined -- picking a Source/Name on the Aggregate
+			Products table un-hid the CSB worksheets whose columns are generated from it).
+		*/
+		function makeVisibilityApp()
+		{
+			return makeApplication({
+				Hash: 'Grades',
+				Layout: 'Tabular',
+				RecordSetAddress: 'Grades',
+				RecordManifest: 'GradeRowEditor',
+				DynamicColumns:
+				[
+					{
+						SourceAddress: 'Assignments',
+						HashTemplate: 'Grade_{~D:Record.IDAssignment~}',
+						NameTemplate: '{~D:Record.Title~}',
+						InformaryDataAddressTemplate: 'Grades.{~D:Record.IDAssignment~}',
+						DataType: 'Number',
+						PictForm: { InputType: 'Number' }
+					}
+				]
+			});
+		}
+
+		// Paint the view into a real destination element so #SECTION-<formID> exists to assert on.
+		function paintView(pView)
+		{
+			document.body.innerHTML = `<div id="${String(pView.options.DefaultDestinationAddress).replace(/^#/, '')}"></div>`;
+			pView.render();
+		}
+
+		test('A hidden section STAYS hidden across a DynamicColumns re-render', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				let fSection = () => document.querySelector(`#SECTION-${tmpView.formID}`);
+
+				paintView(tmpView);
+				Expect(fSection()).to.not.equal(null, 'the section painted');
+
+				tmpBehaviors.hideSection('Class');
+				Expect(fSection().className).to.contain('pict-section-form-hidden-section', 'baseline: section hidden');
+
+				// Rename a source row: namesChanged, so the Tabular layout re-renders the section mid-marshal.
+				_Pict.AppData.Assignments[0].Title = 'Renamed';
+				_Pict.providers['Pict-Layout-Tabular'].onDataMarshalToForm(tmpView, tmpGroup);
+
+				Expect(tmpGroup.supportingManifest.elementDescriptors['Grade_1'].Name).to.equal('Renamed',
+					'the re-render did happen (header label re-baked)');
+				Expect(fSection()).to.not.equal(null, 'the section re-painted');
+				Expect(fSection().className).to.contain('pict-section-form-hidden-section',
+					'the hide class survived the DynamicColumns re-render');
+			}, fDone);
+		});
+
+		test('A section shown again STAYS visible across a DynamicColumns re-render', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				let fSection = () => document.querySelector(`#SECTION-${tmpView.formID}`);
+
+				paintView(tmpView);
+				tmpBehaviors.hideSection('Class');
+				tmpBehaviors.showSection('Class');
+
+				_Pict.AppData.Assignments[0].Title = 'Renamed';
+				_Pict.providers['Pict-Layout-Tabular'].onDataMarshalToForm(tmpView, tmpGroup);
+
+				Expect(fSection().className).to.not.contain('pict-section-form-hidden-section',
+					'a re-shown section must not be re-hidden by the restore');
+			}, fDone);
+		});
+
+		test('A hidden GROUP stays hidden across renderGroupInPlace', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				let fGroup = () => document.querySelector(`#GROUP-${tmpView.formID}-Grades`);
+
+				paintView(tmpView);
+				Expect(fGroup()).to.not.equal(null, 'the group painted');
+
+				tmpBehaviors.hideGroup('Class', 'Grades');
+				Expect(fGroup().className).to.contain('pict-section-form-hidden-group', 'baseline: group hidden');
+
+				// renderGroupInPlace swaps the group element's outerHTML for freshly parsed template
+				// output, which carries only the manifest CSSClass -- the hide class has to be restored.
+				Expect(tmpBehaviors.renderGroupInPlace(tmpView, 'Grades')).to.equal(true, 'scoped render ran');
+
+				Expect(fGroup()).to.not.equal(null, 'the group re-painted');
+				Expect(fGroup().className).to.contain('pict-section-form-hidden-group',
+					'the group hide class survived the in-place group render');
+			}, fDone);
+		});
+
+		/*
+			Highlight classes and inline colors land on rows and cells the section template regenerates,
+			so they die on the same renders the hide class did. MI-BatchSheetCombined hides rows inside
+			its CSB tables with highlighttabularrow(..., "is-hidden"), which is the same defect one layer
+			down: the row would come back visible on a Source/Name change.
+		*/
+		test('A tabular row highlight survives a DynamicColumns re-render', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				let fRow = () => document.querySelector(`#GROUP-${tmpView.formID}-Grades tr[data-tabular-row-index="1"]`);
+
+				paintView(tmpView);
+				Expect(fRow()).to.not.equal(null, 'the row painted');
+
+				tmpBehaviors.highlightTabularRow('Class', 'Grades', 1, 1, 'is-flagged');
+				Expect(fRow().className).to.contain('is-flagged', 'baseline: row highlighted');
+
+				_Pict.AppData.Assignments[0].Title = 'Renamed';
+				_Pict.providers['Pict-Layout-Tabular'].onDataMarshalToForm(tmpView, tmpGroup);
+
+				Expect(fRow()).to.not.equal(null, 'the row re-painted');
+				Expect(fRow().className).to.contain('is-flagged', 'the highlight survived the re-render');
+			}, fDone);
+		});
+
+		test('A highlight that was turned back off stays off across a re-render', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				let fRow = () => document.querySelector(`#GROUP-${tmpView.formID}-Grades tr[data-tabular-row-index="1"]`);
+
+				paintView(tmpView);
+				tmpBehaviors.highlightTabularRow('Class', 'Grades', 1, 1, 'is-flagged');
+				tmpBehaviors.highlightTabularRow('Class', 'Grades', 1, 0, 'is-flagged');
+
+				_Pict.AppData.Assignments[0].Title = 'Renamed';
+				_Pict.providers['Pict-Layout-Tabular'].onDataMarshalToForm(tmpView, tmpGroup);
+
+				Expect(fRow().className).to.not.contain('is-flagged', 'a cleared highlight must not come back');
+			}, fDone);
+		});
+
+		test('Re-highlighting the same row does not accumulate registry entries', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				paintView(tmpView);
+
+				for (let i = 0; i < 5; i++)
+				{
+					tmpBehaviors.highlightTabularRow('Class', 'Grades', 1, 1, 'is-flagged');
+				}
+				let tmpKeys = Object.keys(tmpBehaviors.decorationState).filter((pKey) => pKey.indexOf('Class::Grades::row::1::is-flagged') === 0);
+				Expect(tmpKeys.length).to.equal(1, 'keyed by target, so repeats overwrite');
+			}, fDone);
+		});
+
+		test('Decorations recorded against another section are not replayed here', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpBehaviors = _Pict.providers.DynamicFormSolverBehaviors;
+				paintView(tmpView);
+
+				let tmpCalls = [];
+				let tmpOriginal = tmpBehaviors.highlightTabularRow;
+				tmpBehaviors.decorationState['SomeOtherSection::Grid::row::0::is-flagged'] =
+					{ Section: 'SomeOtherSection', Method: 'highlightTabularRow', Arguments: [ 'SomeOtherSection', 'Grid', 0, 1, 'is-flagged' ] };
+				tmpBehaviors.highlightTabularRow = function () { tmpCalls.push(Array.from(arguments)); return true; };
+				try
+				{
+					tmpBehaviors.reapplySectionDecorations('Class');
+				}
+				finally
+				{
+					tmpBehaviors.highlightTabularRow = tmpOriginal;
+				}
+
+				Expect(tmpCalls.length).to.equal(0, 'replay is scoped to the rendered section');
+			}, fDone);
+		});
+
+		test('A section with no recorded visibility is left exactly as the template rendered it', (fDone) =>
+		{
+			bootstrap(makeVisibilityApp(), (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let fSection = () => document.querySelector(`#SECTION-${tmpView.formID}`);
+
+				paintView(tmpView);
+				let tmpBaseline = fSection().className;
+
+				_Pict.AppData.Assignments[0].Title = 'Renamed';
+				_Pict.providers['Pict-Layout-Tabular'].onDataMarshalToForm(tmpView, tmpGroup);
+
+				Expect(fSection().className).to.equal(tmpBaseline,
+					'forms that never call the visibility solvers are untouched');
+			}, fDone);
+		});
+
 		test('Steady-state re-run reports neither changed nor namesChanged', (fDone) =>
 		{
 			let App = makeApplication({

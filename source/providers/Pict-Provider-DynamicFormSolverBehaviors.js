@@ -42,6 +42,22 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 		/** @type {string} */
 		this.cssHideSectionClass = 'pict-section-form-hidden-section';
 		this.cssHideGroupClass = 'pict-section-form-hidden-group';
+
+		// #SECTION-<formID> and #GROUP-<formID>-<hash> are both emitted by the section template, so a
+		// render() regenerates them without the hide class and the hide silently reverts. Record what
+		// was asked for so reapplySectionVisibility can restore it after a render.
+		/** @type {Record<string, boolean>} */
+		this.sectionVisibilityState = {};
+		/** @type {Record<string, boolean>} */
+		this.groupVisibilityState = {};
+
+		// Same story for every solver that decorates the DOM -- highlight classes and inline background
+		// colors all land on markup the section template regenerates. Keyed by what the decoration
+		// targets so re-applying one overwrites rather than accumulating.
+		/** @type {Record<string, {Section: string, Method: string, Arguments: Array<any>}>} */
+		this.decorationState = {};
+		/** @type {boolean} */
+		this.decorationReplayInProgress = false;
 		/** @type {string} */
 		this.cssTabularRowHighlightClass = 'pict-tabular-row-highlight';
 		/** @type {string} */
@@ -367,6 +383,10 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 
+		// Record BEFORE the DOM guard below: the guard short-circuits when the DOM already matches, and
+		// the state map has to stay accurate even then so a later render can restore it.
+		this.sectionVisibilityState[pSectionHash] = false;
+
 		if (this.pict.ContentAssignment.hasClass(this.getSectionSelector(tmpSectionView.formID), this.cssHideSectionClass))
 		{
 			// Already hidden.
@@ -385,6 +405,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			this.log.warn(`PictDynamicFormsInformary: showSection could not find section with hash [${pSectionHash}].`);
 			return false;
 		}
+
+		this.sectionVisibilityState[pSectionHash] = true;
 
 		if (!this.pict.ContentAssignment.hasClass(this.getSectionSelector(tmpSectionView.formID), this.cssHideSectionClass))
 		{
@@ -422,6 +444,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 
+		this.groupVisibilityState[this.getGroupVisibilityStateKey(pSectionHash, pGroupHash)] = false;
+
 		if (this.pict.ContentAssignment.hasClass(this.getGroupSelector(tmpGroupView.formID, pGroupHash), this.cssHideGroupClass))
 		{
 			// Already hidden.
@@ -441,6 +465,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 
+		this.groupVisibilityState[this.getGroupVisibilityStateKey(pSectionHash, pGroupHash)] = true;
+
 		if (!this.pict.ContentAssignment.hasClass(this.getGroupSelector(tmpGroupView.formID, pGroupHash), this.cssHideGroupClass))
 		{
 			// Already visible.
@@ -449,6 +475,196 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 
 		this.pict.ContentAssignment.removeClass(this.getGroupSelector(tmpGroupView.formID, pGroupHash), this.cssHideGroupClass);
 		return true;
+	}
+
+	/**
+	 * @param {string} pSectionHash
+	 * @param {string} pGroupHash
+	 *
+	 * @return {string} - The groupVisibilityState key for a section/group pair.
+	 */
+	getGroupVisibilityStateKey(pSectionHash, pGroupHash)
+	{
+		return `${pSectionHash}::${pGroupHash}`;
+	}
+
+	/**
+	 * Re-apply a section's recorded visibility (and that of its groups) after a render regenerated its DOM.
+	 *
+	 * Every render path -- DynamicColumns rebuild, dependent-view rebuild, row add/delete/move, the
+	 * group-scoped swap in renderGroupInPlace -- repaints those elements with only their manifest
+	 * CSSClass, and solvers run BEFORE the marshal that triggers them, so nothing else puts the hide
+	 * back. Called from the view's onAfterRender so one restore covers them all. A section with no
+	 * recorded state is left as the template rendered it.
+	 *
+	 * @param {string} pSectionHash - The section that was just rendered.
+	 *
+	 * @return {void}
+	 */
+	reapplySectionVisibility(pSectionHash)
+	{
+		if (typeof pSectionHash !== 'string' || pSectionHash.length < 1)
+		{
+			return;
+		}
+
+		if (pSectionHash in this.sectionVisibilityState)
+		{
+			this.setSectionVisibility(pSectionHash, this.sectionVisibilityState[pSectionHash] ? 1 : 0);
+		}
+
+		const tmpGroupKeyPrefix = `${pSectionHash}::`;
+		const tmpGroupKeys = Object.keys(this.groupVisibilityState);
+		for (let i = 0; i < tmpGroupKeys.length; i++)
+		{
+			if (tmpGroupKeys[i].indexOf(tmpGroupKeyPrefix) !== 0)
+			{
+				continue;
+			}
+			const tmpGroupHash = tmpGroupKeys[i].substring(tmpGroupKeyPrefix.length);
+			this.setGroupVisibility(pSectionHash, tmpGroupHash, this.groupVisibilityState[tmpGroupKeys[i]] ? 1 : 0);
+		}
+	}
+
+	/**
+	 * Remember a DOM decoration a solver just applied so it can be replayed after a render.
+	 *
+	 * @param {string} pSectionHash - The section the decoration targets.
+	 * @param {string} pKey - Stable identity for what is decorated; a repeat overwrites it.
+	 * @param {string} pMethod - The method on this provider that applies it.
+	 * @param {Array<any>} pArguments - The arguments to replay it with.
+	 *
+	 * @return {void}
+	 */
+	recordDecoration(pSectionHash, pKey, pMethod, pArguments)
+	{
+		if (this.decorationReplayInProgress)
+		{
+			return;
+		}
+		this.decorationState[`${pSectionHash}::${pKey}`] = { Section: pSectionHash, Method: pMethod, Arguments: pArguments };
+	}
+
+	/**
+	 * Replay every decoration recorded against a section after a render repainted its markup.
+	 *
+	 * Highlight classes and inline colors live on rows, cells and containers that the section
+	 * template regenerates, exactly like the hide classes. Replay is idempotent: each entry is
+	 * keyed by its target, and a recorded "remove" simply re-runs a removal against fresh markup.
+	 *
+	 * @param {string} pSectionHash - The section that was just rendered.
+	 *
+	 * @return {void}
+	 */
+	reapplySectionDecorations(pSectionHash)
+	{
+		if (typeof pSectionHash !== 'string' || pSectionHash.length < 1)
+		{
+			return;
+		}
+
+		const tmpKeys = Object.keys(this.decorationState);
+		this.decorationReplayInProgress = true;
+		try
+		{
+			for (let i = 0; i < tmpKeys.length; i++)
+			{
+				const tmpEntry = this.decorationState[tmpKeys[i]];
+				if (!tmpEntry || (tmpEntry.Section !== pSectionHash) || (typeof this[tmpEntry.Method] !== 'function'))
+				{
+					continue;
+				}
+				this[tmpEntry.Method].apply(this, tmpEntry.Arguments);
+			}
+		}
+		finally
+		{
+			this.decorationReplayInProgress = false;
+		}
+	}
+
+	/**
+	 * Restore everything a solver put on this section's DOM that a render just wiped -- visibility
+	 * first, then decorations. This is what the section view calls from its own onAfterRender.
+	 *
+	 * @param {string} pSectionHash - The section that was just rendered.
+	 *
+	 * @return {void}
+	 */
+	reapplySectionDOMState(pSectionHash)
+	{
+		this.reapplySectionVisibility(pSectionHash);
+		this.reapplySectionDecorations(pSectionHash);
+	}
+
+	/**
+	 * Re-render a single group in place, leaving the rest of the section's DOM untouched.
+	 *
+	 * The section template is one string (wrap/section prefixes + every group's
+	 * generateGroupLayoutTemplate + postfixes), so a normal render rebuilds all of it.
+	 * This regenerates just the requested group's slice and swaps that one element.
+	 *
+	 * Init is then run the normal way (the view's own post-render pass) rather than being
+	 * hand-scoped: input providers guard their own re-initialization (a select2 picker
+	 * checks for an existing instance before creating one), so untouched groups no-op and
+	 * only the freshly-rendered group actually initializes.
+	 *
+	 * @param {import('../views/Pict-View-DynamicForm.js')} pView - The section view.
+	 * @param {string} pGroupHash - The group to re-render.
+	 * @return {boolean} - True if the group was rendered in place; false to fall back to a full render.
+	 */
+	renderGroupInPlace(pView, pGroupHash)
+	{
+		try
+		{
+			if (!pView || !pView.formID || (typeof pView.getGroupIndexFromHash !== 'function'))
+			{
+				return false;
+			}
+			const tmpGroupIndex = pView.getGroupIndexFromHash(pGroupHash);
+			if (tmpGroupIndex < 0)
+			{
+				return false;
+			}
+			const tmpGroup = pView.getGroup(tmpGroupIndex);
+			const tmpGenerator = this.pict.providers.MetatemplateGenerator;
+			if (!tmpGroup || !tmpGenerator || (typeof tmpGenerator.getGroupLayoutProvider !== 'function'))
+			{
+				return false;
+			}
+			const tmpLayout = tmpGenerator.getGroupLayoutProvider(pView, tmpGroup);
+			if (!tmpLayout || (typeof tmpLayout.generateGroupLayoutTemplate !== 'function'))
+			{
+				return false;
+			}
+			const tmpElements = this.pict.ContentAssignment.getElement(`#GROUP-${pView.formID}-${tmpGroup.Hash}`);
+			const tmpElement = (tmpElements && tmpElements.length) ? tmpElements[0] : null;
+			if (!tmpElement || (typeof tmpElement.outerHTML !== 'string'))
+			{
+				return false;
+			}
+
+			// Same parse shape the view uses for the whole section: the view is Context[0],
+			// which the group templates reference for formID/UUID/Hash.
+			const tmpTemplateHash = `Pict-Form-Template-Group-InPlace-${pView.options.Hash}-G${tmpGroup.GroupIndex}`;
+			this.pict.TemplateProvider.addTemplate(tmpTemplateHash, tmpLayout.generateGroupLayoutTemplate(pView, tmpGroup));
+			const tmpRecordAddress = pView.options.DefaultTemplateRecordAddress;
+			const tmpRecord = (typeof tmpRecordAddress === 'string') ? this.pict.DataProvider.getDataByAddress(tmpRecordAddress) : undefined;
+			const tmpContent = this.pict.parseTemplateByHash(tmpTemplateHash, tmpRecord, null, [ pView ]);
+			if (typeof tmpContent !== 'string' || !tmpContent.length)
+			{
+				return false;
+			}
+
+			tmpElement.outerHTML = tmpContent;
+			pView.onAfterRender({ RenderableHash: `GroupInPlace-${tmpGroup.Hash}` });
+			return true;
+		}
+		catch (pError)
+		{
+			this.log.warn(`renderGroupInPlace failed for group [${pGroupHash}]; falling back to a full section render: ${pError.message || pError}`);
+			return false;
+		}
 	}
 
 	/**
@@ -501,7 +717,15 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			// We expect this view to be in the set.
 			for (let i = 0; i < tmpViewsToRender.length; i++)
 			{
-				tmpViewsToRender[i].render();
+				// Re-render ONLY the group that actually changed when we can. A full
+				// section render replaces every group's DOM, which destroys any widget
+				// the user is mid-interaction with (select2 pickers blank for ~700ms) and
+				// drops layout state. Falls back to the full render when the group-scoped
+				// path is not possible, so behaviour is unchanged for anything it cannot handle.
+				if (!this.renderGroupInPlace(tmpViewsToRender[i], pGroupHash))
+				{
+					tmpViewsToRender[i].render();
+				}
 			}
 
 			//NOTE: not running a solve, since this is run from the solver; if you need a solve, call runSolvers()
@@ -601,6 +825,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return true;
 		}
 
+		this.recordDecoration(pSectionHash, 'sectionbackground', 'colorSectionBackground', [ pSectionHash, pColor, pApplyChange ]);
+
 		let tmpSectionView = this.pict.views.PictFormMetacontroller.getSectionViewFromHash(pSectionHash)
 		if (!tmpSectionView)
 		{
@@ -629,6 +855,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 		{
 			return true;
 		}
+
+		this.recordDecoration(pSectionHash, `${pGroupHash}::groupbackground`, 'colorGroupBackground', [ pSectionHash, pGroupHash, pColor, pApplyChange ]);
 
 		let tmpGroupView = this.pict.views.PictFormMetacontroller.getSectionViewFromHash(pSectionHash)
 		if (!tmpGroupView)
@@ -666,6 +894,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 		{
 			return true;
 		}
+
+		this.recordDecoration(pSectionHash, `input::${pInputHash}`, 'colorInputBackground', [ pSectionHash, pInputHash, pColor, pApplyChange, pCSSSelector ]);
 
 		/** @type {import('../views/Pict-View-DynamicForm.js')} */
 		let tmpInputView = this.pict.views.PictFormMetacontroller.getSectionViewFromHash(pSectionHash);
@@ -718,6 +948,9 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 		{
 			return true;
 		}
+
+		this.recordDecoration(pSectionHash, `${pGroupHash}::inputcell::${pInputHash}::${pRowIndex}`, 'colorInputBackgroundTabular',
+			[ pSectionHash, pGroupHash, pInputHash, pRowIndex, pColor, pApplyChange, pCSSSelector, pElementIDPrefix ]);
 
 		/** @type {import('../views/Pict-View-DynamicForm.js')} */
 		let tmpInputView = this.pict.views.PictFormMetacontroller.getSectionViewFromHash(pSectionHash);
@@ -862,6 +1095,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 		let tmpClass = (typeof pHighlightClass === 'string' && pHighlightClass.length > 0) ? pHighlightClass : this.cssTabularRowHighlightClass;
+		this.recordDecoration(pSectionHash, `${pGroupHash}::row::${pRowIndex}::${tmpClass}`, 'highlightTabularRow',
+			[ pSectionHash, pGroupHash, pRowIndex, pApplyFlag, pHighlightClass ]);
 		let tmpRowSelector = `${tmpGroupSelector} tr[data-tabular-row-index="${pRowIndex}"]`;
 		if (this.isSolverFlagEnabled(pApplyFlag))
 		{
@@ -894,6 +1129,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 		let tmpClass = (typeof pHighlightClass === 'string' && pHighlightClass.length > 0) ? pHighlightClass : this.cssTabularColumnHighlightClass;
+		this.recordDecoration(pSectionHash, `${pGroupHash}::column::${pColumnIndex}::${tmpClass}`, 'highlightTabularColumn',
+			[ pSectionHash, pGroupHash, pColumnIndex, pApplyFlag, pHighlightClass ]);
 		let tmpColumnSelector = `${tmpGroupSelector} [data-tabular-column-index="${pColumnIndex}"]`;
 		if (this.isSolverFlagEnabled(pApplyFlag))
 		{
@@ -928,6 +1165,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 		let tmpApply = this.isSolverFlagEnabled(pApplyFlag) && (typeof pColor === 'string') && (pColor.length > 0);
+		this.recordDecoration(pSectionHash, `${pGroupHash}::rowcolor::${pRowIndex}`, 'colorTabularRow',
+			[ pSectionHash, pGroupHash, pRowIndex, pColor, pApplyFlag ]);
 		let tmpElementSet = this.pict.ContentAssignment.getElement(`${tmpGroupSelector} tr[data-tabular-row-index="${pRowIndex}"] td`);
 		for (let i = 0; i < tmpElementSet.length; i++)
 		{
@@ -962,6 +1201,8 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			return false;
 		}
 		let tmpApply = this.isSolverFlagEnabled(pApplyFlag) && (typeof pColor === 'string') && (pColor.length > 0);
+		this.recordDecoration(pSectionHash, `${pGroupHash}::columncolor::${pColumnIndex}`, 'colorTabularColumn',
+			[ pSectionHash, pGroupHash, pColumnIndex, pColor, pApplyFlag ]);
 		let tmpElementSet = this.pict.ContentAssignment.getElement(`${tmpGroupSelector} [data-tabular-column-index="${pColumnIndex}"]`);
 		for (let i = 0; i < tmpElementSet.length; i++)
 		{
