@@ -604,6 +604,49 @@ class CustomInputHandler extends libPictSectionInputExtension
 		this.applyInputParsingConfiguration(pInput, tmpChartConfiguration, this.defaultLabelParsingConfiguration, 'PictForm.ChartLabelsParsingConfigurationOverride');
 		this.applyInputParsingConfiguration(pInput, tmpChartConfiguration, this.defaultDataParsingConfiguration, 'PictForm.ChartDataParsingConfigurationOverride');
 
+		// A blank is a MISSING reading, not a zero one. Solver-built series routinely carry "" for
+		// "this measure has no value here" -- a control limit the agency does not publish, a sample
+		// the lab never ran -- and Chart.js coerces that empty string to 0, drawing a line that dives
+		// to the axis and reads as a real measurement of zero. Chart.js's own convention for a gap is
+		// null, so blanks are normalized to it and the series simply breaks. Set ChartPlotBlanksAsZero
+		// to keep the old coercion for a chart that genuinely means zero.
+		if (!tmpPictform.ChartPlotBlanksAsZero)
+		{
+			const tmpDatasets = tmpChartConfiguration?.data?.datasets;
+			if (Array.isArray(tmpDatasets))
+			{
+				for (let i = 0; i < tmpDatasets.length; i++)
+				{
+					if (!tmpDatasets[i] || !Array.isArray(tmpDatasets[i].data)) { continue; }
+					tmpDatasets[i].data = tmpDatasets[i].data.map(
+						(pPoint) => ((pPoint === '') || (pPoint === null) || (typeof (pPoint) === 'undefined')) ? null : pPoint);
+				}
+			}
+		}
+
+		// ChartHeight is one knob with two halves: the template gives the canvas container a min-height,
+		// and Chart.js has to be told to stop deriving its own height from the width or it will ignore
+		// that box entirely. Requiring a caller to set maintainAspectRatio by hand alongside the height
+		// would make a single intent ("make this chart taller") into two coupled settings that are wrong
+		// in isolation, so it is derived here. An explicit maintainAspectRatio in the core prototype still
+		// wins -- this only fills in the value the caller did not state.
+		const tmpChartHeight = parseFloat(tmpPictform.ChartHeight);
+		if (isFinite(tmpChartHeight) && (tmpChartHeight > 0))
+		{
+			if (typeof (tmpChartConfiguration.options) !== 'object' || tmpChartConfiguration.options === null)
+			{
+				tmpChartConfiguration.options = {};
+			}
+			if (!('maintainAspectRatio' in tmpChartConfiguration.options))
+			{
+				tmpChartConfiguration.options.maintainAspectRatio = false;
+			}
+			if (!('responsive' in tmpChartConfiguration.options))
+			{
+				tmpChartConfiguration.options.responsive = true;
+			}
+		}
+
 		return tmpChartConfiguration;
 	}
 

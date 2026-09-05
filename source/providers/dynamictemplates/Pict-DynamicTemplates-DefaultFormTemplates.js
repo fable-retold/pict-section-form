@@ -263,7 +263,11 @@ Glug glug glug Oo... -->
 					<div style="width:{~DWAF:Record.PictForm.QuantizedWidth:100~}%; display:inline-block;">
 						<input type="hidden" id="CONFIG-FOR-{~D:Record.Macro.RawHTMLID~}" value="">
 						<h3><span>{~D:Record.Name~}:</span></h3>
-						<div style="width:100%;"><canvas id="CANVAS-FOR-{~D:Record.Macro.RawHTMLID~}" {~D:Record.Macro.ControlAttr~} {~D:Record.Macro.InputFullProperties~}></canvas></div>
+						<!-- ChartHeight (pixels) sets the plot area. It is min-height rather than height so the
+					     default of 0 is a true no-op for every chart that never sets it: Chart.js keeps sizing
+					     the canvas by its 2:1 aspect ratio exactly as before. When it IS set, the provider turns
+					     maintainAspectRatio off so the canvas fills this box instead of ignoring it. -->
+						<div style="width:100%; min-height:{~DWAF:Record.PictForm.ChartHeight:0~}px;"><canvas id="CANVAS-FOR-{~D:Record.Macro.RawHTMLID~}" {~D:Record.Macro.ControlAttr~} {~D:Record.Macro.InputFullProperties~}></canvas></div>
 					</div>
 `
 		},
