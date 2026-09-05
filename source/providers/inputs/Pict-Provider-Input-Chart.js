@@ -514,6 +514,17 @@ class CustomInputHandler extends libPictSectionInputExtension
 							tmpDataObject.stack = tmpCurrentSolverExpression.StackGroup;
 						}
 
+						// DatasetOptions is the general escape hatch: every key is merged onto
+						// the Chart.js dataset as-is. Without it a dataset could only carry the
+						// handful of properties named above, so a series could not be given a
+						// colour, a dash pattern, or told not to join its points -- the config
+						// was silently dropped and the chart drew in default colours. It is
+						// applied last, so it wins over the named options above.
+						if (tmpCurrentSolverExpression.DatasetOptions && (typeof(tmpCurrentSolverExpression.DatasetOptions) === 'object'))
+						{
+							Object.assign(tmpDataObject, tmpCurrentSolverExpression.DatasetOptions);
+						}
+
 						if (tmpParsingConfiguration.ObjectType === 'array')
 						{
 							if (Array.isArray(tmpSolvedDataSet))

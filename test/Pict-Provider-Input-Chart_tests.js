@@ -131,6 +131,66 @@ suite('Pict-Provider-Input-Chart', () =>
 		});
 	});
 
+	suite('DatasetOptions', () =>
+	{
+		// The provider copies a fixed allowlist of properties onto each dataset
+		// (ChartType / CustomYAxisID / CustomXAxisID / Tension / PointRadius /
+		// StackGroup). Anything else was dropped, so a series could not be given a
+		// colour or a dash pattern from configuration at all.
+		const solverDataset = (pEntry) =>
+		{
+			const tmpPict = new libPict();
+			const tmpProvider = new libChartInput(tmpPict, {});
+			tmpPict.providers.DynamicSolver = { runSolver: () => [ 1, 2, 3 ] };
+			const tmpInput =
+			{
+				Name: 'C', Hash: 'C', DataType: 'Object',
+				Macro: { RawHTMLID: 'C-input', InputFullProperties: '', InputChangeHandler: '', ControlAttr: '' },
+				PictForm: { InputType: 'Chart', ChartType: 'line', ChartDatasetsSolvers: [ pEntry ] },
+			};
+			const tmpConfiguration = tmpProvider.getInputChartConfiguration({ }, tmpInput, {});
+			return tmpConfiguration.data.datasets[0];
+		};
+
+		test('arbitrary Chart.js dataset properties reach the dataset', () =>
+		{
+			const tmpDataset = solverDataset({ Label: 'Limit', DataSolver: 'x',
+				DatasetOptions: { borderColor: '#E03131', borderDash: [ 2, 3 ], showLine: false } });
+			Expect(tmpDataset.borderColor).to.equal('#E03131');
+			Expect(tmpDataset.borderDash).to.deep.equal([ 2, 3 ]);
+			Expect(tmpDataset.showLine).to.equal(false);
+		});
+
+		test('label and data still come from Label / DataSolver', () =>
+		{
+			const tmpDataset = solverDataset({ Label: 'Limit', DataSolver: 'x', DatasetOptions: { borderColor: '#000' } });
+			Expect(tmpDataset.label).to.equal('Limit');
+			Expect(tmpDataset.data).to.deep.equal([ 1, 2, 3 ]);
+		});
+
+		test('it wins over the named options, being applied last', () =>
+		{
+			const tmpDataset = solverDataset({ Label: 'L', DataSolver: 'x', PointRadius: 9, DatasetOptions: { pointRadius: 2 } });
+			Expect(tmpDataset.pointRadius).to.equal(2);
+		});
+
+		test('a dataset without DatasetOptions is unchanged', () =>
+		{
+			const tmpDataset = solverDataset({ Label: 'L', DataSolver: 'x' });
+			Expect(tmpDataset).to.not.have.property('borderColor');
+			Expect(Object.keys(tmpDataset)).to.deep.equal([ 'label', 'data' ]);
+		});
+
+		test('a non-object DatasetOptions is ignored rather than throwing', () =>
+		{
+			for (const tmpBad of [ 'nope', 42, null ])
+			{
+				const tmpDataset = solverDataset({ Label: 'L', DataSolver: 'x', DatasetOptions: tmpBad });
+				Expect(tmpDataset.label, `DatasetOptions ${JSON.stringify(tmpBad)}`).to.equal('L');
+			}
+		});
+	});
+
 	suite('template', () =>
 	{
 		test('the chart canvas container carries the ChartHeight min-height', () =>
