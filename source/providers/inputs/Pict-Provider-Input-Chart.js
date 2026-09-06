@@ -1,4 +1,5 @@
 const libPictSectionInputExtension = require('../Pict-Provider-InputExtension.js');
+const libChartCSS = require('./Pict-Provider-Input-Chart-CSS.js');
 
 /**
  * CustomInputHandler class.
@@ -127,6 +128,209 @@ class CustomInputHandler extends libPictSectionInputExtension
 
 		this.currentChartObjects = {};
 		this.currentChartDataObjects = {};
+		// Legend visibility + collapsed groups, per input hash, so a redraw does not
+		// undo what the user toggled.
+		this.currentChartLegendState = {};
+
+		if (this.pict && this.pict.CSSMap && typeof this.pict.CSSMap.addCSS === 'function')
+		{
+			this.pict.CSSMap.addCSS('Pict-Input-Chart-CSS', libChartCSS, 500);
+		}
+	}
+
+	/**
+	 * Classify a dataset's line style for its legend swatch, so a reading, a
+	 * dashed control limit and an unconnected marker series are told apart at a
+	 * glance. Chart.js's own legend draws every entry as the same block.
+	 *
+	 * @param {Object} pDataset - The Chart.js dataset.
+	 * @return {string} A swatch modifier class.
+	 */
+	_legendSwatchClass(pDataset)
+	{
+		if (pDataset.showLine === false) { return 'pict-swatch-markers'; }
+		const tmpDash = Array.isArray(pDataset.borderDash) ? pDataset.borderDash : null;
+		if (!tmpDash || tmpDash.length < 1) { return ''; }
+		// A short first segment reads as dotted, a long one as dashed.
+		return (Number(tmpDash[0]) <= 3) ? 'pict-swatch-dotted' : 'pict-swatch-dashed';
+	}
+
+	/**
+	 * Group the datasets for the legend. A dataset declares its group with
+	 * `LegendGroup` on the solver entry (carried onto the dataset as
+	 * `pictLegendGroup`); anything that does not is "Data". Group ORDER follows
+	 * first appearance, so configuration controls it rather than sort order.
+	 *
+	 * @param {Object} pChart - The Chart.js instance.
+	 * @return {Array<{Key: string, Items: Array<{Index: number, Dataset: Object}>}>}
+	 */
+	_legendGroups(pChart)
+	{
+		const tmpGroups = [];
+		const tmpIndex = {};
+		const tmpDatasets = (pChart && pChart.data && pChart.data.datasets) || [];
+		for (let i = 0; i < tmpDatasets.length; i++)
+		{
+			const tmpKey = tmpDatasets[i].pictLegendGroup || 'Data';
+			if (!(tmpKey in tmpIndex))
+			{
+				tmpIndex[tmpKey] = tmpGroups.length;
+				tmpGroups.push({ Key: tmpKey, Items: [] });
+			}
+			tmpGroups[tmpIndex[tmpKey]].Items.push({ Index: i, Dataset: tmpDatasets[i] });
+		}
+		return tmpGroups;
+	}
+
+	/**
+	 * Build (or rebuild) the grouped HTML legend beside a chart's canvas.
+	 *
+	 * The legend is created in the DOM rather than in the template because there
+	 * are several chart templates (the base set plus per-theme copies) and a
+	 * legend added to only some of them is the kind of divergence that goes
+	 * unnoticed. Chart.js's built-in legend is switched off whenever this runs.
+	 *
+	 * @param {string} pRawHTMLID - The input's Macro.RawHTMLID.
+	 * @param {Object} pChart - The Chart.js instance.
+	 * @param {Object} pLegendConfiguration - The resolved ChartLegend config.
+	 */
+	renderChartLegend(pRawHTMLID, pChart, pLegendConfiguration)
+	{
+		if (typeof (document) === 'undefined' || !pChart || !pChart.canvas) { return false; }
+		const tmpCanvas = pChart.canvas;
+		const tmpContainer = tmpCanvas.parentElement;
+		if (!tmpContainer) { return false; }
+
+		const tmpState = this.currentChartLegendState[pRawHTMLID] = this.currentChartLegendState[pRawHTMLID] || { Hidden: false, Collapsed: {} };
+		const tmpPosition = pLegendConfiguration.Position || 'right';
+
+		// Wrap the canvas once: shell > (canvas area | legend).
+		let tmpShell = tmpContainer.parentElement && tmpContainer.parentElement.classList.contains('pict-chart-shell')
+			? tmpContainer.parentElement : null;
+		if (!tmpShell)
+		{
+			tmpShell = document.createElement('div');
+			tmpShell.className = 'pict-chart-shell';
+			tmpContainer.parentNode.insertBefore(tmpShell, tmpContainer);
+			const tmpArea = document.createElement('div');
+			tmpArea.className = 'pict-chart-canvas-area';
+			tmpShell.appendChild(tmpArea);
+			tmpArea.appendChild(tmpContainer);
+		}
+		tmpShell.classList.remove('pict-chart-legend-top', 'pict-chart-legend-bottom');
+		if (tmpPosition === 'top') { tmpShell.classList.add('pict-chart-legend-top'); }
+		if (tmpPosition === 'bottom') { tmpShell.classList.add('pict-chart-legend-bottom'); }
+
+		let tmpLegend = tmpShell.querySelector(':scope > .pict-chart-legend');
+		if (!tmpLegend)
+		{
+			tmpLegend = document.createElement('div');
+			tmpLegend.className = 'pict-chart-legend';
+			tmpShell.appendChild(tmpLegend);
+		}
+		tmpLegend.innerHTML = '';
+
+		// Show/hide the whole legend. Charts differ in how much room they have,
+		// so this is per-chart and remembered for the session.
+		if (pLegendConfiguration.AllowHide !== false)
+		{
+			const tmpToggle = document.createElement('button');
+			tmpToggle.type = 'button';
+			tmpToggle.className = 'pict-chart-legend-toggle';
+			tmpToggle.textContent = tmpState.Hidden ? 'Show legend' : 'Hide legend';
+			tmpToggle.addEventListener('click', () =>
+			{
+				tmpState.Hidden = !tmpState.Hidden;
+				this.renderChartLegend(pRawHTMLID, pChart, pLegendConfiguration);
+			});
+			tmpLegend.appendChild(tmpToggle);
+		}
+		if (tmpState.Hidden) { return true; }
+
+		const tmpGroups = this._legendGroups(pChart);
+		for (const tmpGroup of tmpGroups)
+		{
+			const tmpGroupElement = document.createElement('div');
+			tmpGroupElement.className = 'pict-chart-legend-group';
+			const tmpAllHidden = tmpGroup.Items.every((pItem) => pChart.getDatasetMeta(pItem.Index).hidden === true);
+			if (tmpAllHidden) { tmpGroupElement.classList.add('pict-group-off'); }
+			if (tmpState.Collapsed[tmpGroup.Key]) { tmpGroupElement.classList.add('pict-collapsed'); }
+
+			const tmpHeader = document.createElement('div');
+			tmpHeader.className = 'pict-chart-legend-group-header';
+			const tmpCaret = document.createElement('span');
+			tmpCaret.className = 'pict-chart-legend-group-caret';
+			tmpCaret.textContent = '▾';
+			tmpHeader.appendChild(tmpCaret);
+			const tmpHeaderLabel = document.createElement('span');
+			tmpHeaderLabel.textContent = tmpGroup.Key;
+			tmpHeader.appendChild(tmpHeaderLabel);
+			// Header click toggles the GROUP's series on/off; the caret collapses it.
+			tmpHeader.addEventListener('click', (pEvent) =>
+			{
+				if (pEvent.target === tmpCaret)
+				{
+					tmpState.Collapsed[tmpGroup.Key] = !tmpState.Collapsed[tmpGroup.Key];
+				}
+				else
+				{
+					const tmpTurnOn = tmpAllHidden;
+					for (const tmpItem of tmpGroup.Items)
+					{
+						pChart.getDatasetMeta(tmpItem.Index).hidden = tmpTurnOn ? false : true;
+					}
+					pChart.update();
+				}
+				this.renderChartLegend(pRawHTMLID, pChart, pLegendConfiguration);
+			});
+			tmpGroupElement.appendChild(tmpHeader);
+
+			const tmpItems = document.createElement('div');
+			tmpItems.className = 'pict-chart-legend-items';
+			for (const tmpItem of tmpGroup.Items)
+			{
+				const tmpHidden = pChart.getDatasetMeta(tmpItem.Index).hidden === true;
+				const tmpItemElement = document.createElement('div');
+				tmpItemElement.className = 'pict-chart-legend-item' + (tmpHidden ? ' pict-hidden' : '');
+				const tmpSwatch = document.createElement('span');
+				tmpSwatch.className = ('pict-chart-legend-swatch ' + this._legendSwatchClass(tmpItem.Dataset)).trim();
+				tmpSwatch.style.color = tmpItem.Dataset.borderColor || tmpItem.Dataset.backgroundColor || '#868E96';
+				tmpItemElement.appendChild(tmpSwatch);
+				const tmpLabel = document.createElement('span');
+				tmpLabel.className = 'pict-chart-legend-label';
+				tmpLabel.textContent = tmpItem.Dataset.label || `Series ${tmpItem.Index + 1}`;
+				tmpLabel.title = tmpLabel.textContent;
+				tmpItemElement.appendChild(tmpLabel);
+				tmpItemElement.addEventListener('click', () =>
+				{
+					pChart.getDatasetMeta(tmpItem.Index).hidden = !tmpHidden;
+					pChart.update();
+					this.renderChartLegend(pRawHTMLID, pChart, pLegendConfiguration);
+				});
+				tmpItems.appendChild(tmpItemElement);
+			}
+			tmpGroupElement.appendChild(tmpItems);
+			tmpLegend.appendChild(tmpGroupElement);
+		}
+		return true;
+	}
+
+	/**
+	 * Resolve the ChartLegend configuration for an input. Returns null when the
+	 * grouped legend is not in use, in which case Chart.js's own legend stands.
+	 *
+	 * @param {Object} pInput - The PictForm input object.
+	 * @return {Object|null}
+	 */
+	resolveChartLegendConfiguration(pInput)
+	{
+		const tmpPictform = (pInput && pInput.PictForm) || {};
+		const tmpLegend = tmpPictform.ChartLegend;
+		if (!tmpLegend) { return null; }
+		if (tmpLegend === true) { return { Position: 'right' }; }
+		if (typeof (tmpLegend) !== 'object') { return null; }
+		if (tmpLegend.Enabled === false) { return null; }
+		return tmpLegend;
 	}
 
 	/**
@@ -525,6 +729,14 @@ class CustomInputHandler extends libPictSectionInputExtension
 							Object.assign(tmpDataObject, tmpCurrentSolverExpression.DatasetOptions);
 						}
 
+						// Which legend group this series belongs to ("Data", "Limits", …).
+						// Carried as a pict-prefixed key so it cannot collide with a Chart.js
+						// dataset property.
+						if (tmpCurrentSolverExpression.LegendGroup)
+						{
+							tmpDataObject.pictLegendGroup = tmpCurrentSolverExpression.LegendGroup;
+						}
+
 						if (tmpParsingConfiguration.ObjectType === 'array')
 						{
 							if (Array.isArray(tmpSolvedDataSet))
@@ -641,6 +853,22 @@ class CustomInputHandler extends libPictSectionInputExtension
 		// would make a single intent ("make this chart taller") into two coupled settings that are wrong
 		// in isolation, so it is derived here. An explicit maintainAspectRatio in the core prototype still
 		// wins -- this only fills in the value the caller did not state.
+		// The grouped legend replaces Chart.js's own, which is a single wrapped row
+		// of identical swatches -- unreadable once a chart carries a reading, a
+		// running average and three pairs of control limits.
+		if (this.resolveChartLegendConfiguration(pInput))
+		{
+			if (typeof (tmpChartConfiguration.options) !== 'object' || tmpChartConfiguration.options === null)
+			{
+				tmpChartConfiguration.options = {};
+			}
+			if (typeof (tmpChartConfiguration.options.plugins) !== 'object' || tmpChartConfiguration.options.plugins === null)
+			{
+				tmpChartConfiguration.options.plugins = {};
+			}
+			tmpChartConfiguration.options.plugins.legend = Object.assign({}, tmpChartConfiguration.options.plugins.legend, { display: false });
+		}
+
 		const tmpChartHeight = parseFloat(tmpPictform.ChartHeight);
 		if (isFinite(tmpChartHeight) && (tmpChartHeight > 0))
 		{
@@ -687,6 +915,12 @@ class CustomInputHandler extends libPictSectionInputExtension
 			this.currentChartObjects[`Object-For-${pInput.Macro.RawHTMLID}`] = new window.Chart(tmpChartCanvasElement, tmpChartConfiguration);
 			// TODO: Make this invalidation better.
 			this.currentChartDataObjects[`Data-For-${pInput.Macro.RawHTMLID}`] = JSON.stringify(tmpChartConfiguration.data);
+
+			const tmpLegendConfiguration = this.resolveChartLegendConfiguration(pInput);
+			if (tmpLegendConfiguration)
+			{
+				this.renderChartLegend(pInput.Macro.RawHTMLID, this.currentChartObjects[`Object-For-${pInput.Macro.RawHTMLID}`], tmpLegendConfiguration);
+			}
 		}
 	}
 
@@ -782,6 +1016,11 @@ class CustomInputHandler extends libPictSectionInputExtension
 			{
 				this.currentChartObjects[`Object-For-${pInput.Macro.RawHTMLID}`].data = tmpChartConfiguration.data;
 				this.currentChartObjects[`Object-For-${pInput.Macro.RawHTMLID}`].update();
+				const tmpUpdatedLegendConfiguration = this.resolveChartLegendConfiguration(pInput);
+				if (tmpUpdatedLegendConfiguration)
+				{
+					this.renderChartLegend(pInput.Macro.RawHTMLID, this.currentChartObjects[`Object-For-${pInput.Macro.RawHTMLID}`], tmpUpdatedLegendConfiguration);
+				}
 				this.currentChartDataObjects[`Data-For-${pInput.Macro.RawHTMLID}`] = tmpNewChartDataString;
 			}
 		}

@@ -191,6 +191,88 @@ suite('Pict-Provider-Input-Chart', () =>
 		});
 	});
 
+	suite('grouped legend', () =>
+	{
+		const provider = () => new libChartInput(new libPict(), {});
+
+		test('ChartLegend is off unless configured, leaving Chart.js\'s own legend alone', () =>
+		{
+			const tmpProvider = provider();
+			Expect(tmpProvider.resolveChartLegendConfiguration({ PictForm: {} })).to.equal(null);
+			Expect(tmpProvider.resolveChartLegendConfiguration({ PictForm: { ChartLegend: { Enabled: false } } })).to.equal(null);
+		});
+
+		test('ChartLegend: true is shorthand for a right-hand legend', () =>
+		{
+			Expect(provider().resolveChartLegendConfiguration({ PictForm: { ChartLegend: true } })).to.deep.equal({ Position: 'right' });
+		});
+
+		test('configuring it disables the built-in legend', () =>
+		{
+			const tmpPict = new libPict();
+			const tmpProvider = new libChartInput(tmpPict, {});
+			tmpPict.providers.DynamicSolver = { runSolver: () => [ 1, 2 ] };
+			const tmpConfiguration = tmpProvider.getInputChartConfiguration({ }, {
+				Name: 'C', Hash: 'C', DataType: 'Object',
+				Macro: { RawHTMLID: 'C', InputFullProperties: '', InputChangeHandler: '', ControlAttr: '' },
+				PictForm: { InputType: 'Chart', ChartType: 'line', ChartLegend: true, ChartDatasetsSolvers: [ { Label: 'A', DataSolver: 'x' } ] },
+			}, {});
+			Expect(tmpConfiguration.options.plugins.legend.display).to.equal(false);
+		});
+
+		test('LegendGroup lands on the dataset as pictLegendGroup', () =>
+		{
+			const tmpPict = new libPict();
+			const tmpProvider = new libChartInput(tmpPict, {});
+			tmpPict.providers.DynamicSolver = { runSolver: () => [ 1 ] };
+			const tmpConfiguration = tmpProvider.getInputChartConfiguration({ }, {
+				Name: 'C', Hash: 'C', DataType: 'Object',
+				Macro: { RawHTMLID: 'C', InputFullProperties: '', InputChangeHandler: '', ControlAttr: '' },
+				PictForm: { InputType: 'Chart', ChartType: 'line', ChartDatasetsSolvers: [
+					{ Label: 'Reading', DataSolver: 'x' },
+					{ Label: 'Limit', DataSolver: 'y', LegendGroup: 'Limits' } ] },
+			}, {});
+			Expect(tmpConfiguration.data.datasets[0].pictLegendGroup).to.equal(undefined);
+			Expect(tmpConfiguration.data.datasets[1].pictLegendGroup).to.equal('Limits');
+		});
+
+		test('datasets group by LegendGroup, ungrouped ones falling under Data, in configuration order', () =>
+		{
+			const tmpChart = { data: { datasets: [
+				{ label: 'Reading' },
+				{ label: 'Upper', pictLegendGroup: 'Limits' },
+				{ label: 'Average' },
+				{ label: 'Lower', pictLegendGroup: 'Limits' } ] } };
+			const tmpGroups = provider()._legendGroups(tmpChart);
+			Expect(tmpGroups.map((pGroup) => pGroup.Key)).to.deep.equal([ 'Data', 'Limits' ]);
+			Expect(tmpGroups[0].Items.map((pItem) => pItem.Index)).to.deep.equal([ 0, 2 ]);
+			Expect(tmpGroups[1].Items.map((pItem) => pItem.Index)).to.deep.equal([ 1, 3 ]);
+		});
+
+		test('the swatch distinguishes solid, dashed, dotted and marker-only series', () =>
+		{
+			const tmpProvider = provider();
+			Expect(tmpProvider._legendSwatchClass({}), 'solid').to.equal('');
+			Expect(tmpProvider._legendSwatchClass({ borderDash: [ 6, 4 ] }), 'dashed').to.equal('pict-swatch-dashed');
+			Expect(tmpProvider._legendSwatchClass({ borderDash: [ 2, 3 ] }), 'dotted').to.equal('pict-swatch-dotted');
+			Expect(tmpProvider._legendSwatchClass({ showLine: false }), 'markers').to.equal('pict-swatch-markers');
+		});
+
+		test('a marker-only series wins over its dash pattern', () =>
+		{
+			Expect(provider()._legendSwatchClass({ showLine: false, borderDash: [ 6, 4 ] })).to.equal('pict-swatch-markers');
+		});
+
+		test('legend state is per input, so one chart\'s toggles do not move another\'s', () =>
+		{
+			const tmpProvider = provider();
+			tmpProvider.currentChartLegendState['ChartA'] = { Hidden: true, Collapsed: { Limits: true } };
+			tmpProvider.currentChartLegendState['ChartB'] = { Hidden: false, Collapsed: {} };
+			Expect(tmpProvider.currentChartLegendState['ChartA'].Hidden).to.equal(true);
+			Expect(tmpProvider.currentChartLegendState['ChartB'].Hidden).to.equal(false);
+		});
+	});
+
 	suite('template', () =>
 	{
 		test('the chart canvas container carries the ChartHeight min-height', () =>
