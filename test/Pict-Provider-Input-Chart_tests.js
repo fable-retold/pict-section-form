@@ -273,6 +273,53 @@ suite('Pict-Provider-Input-Chart', () =>
 		});
 	});
 
+	suite('legend re-entrancy', () =>
+	{
+		// renderChartLegend runs again on every data refresh and on every toggle.
+		// It must reuse the wrapper it already built. It did not: after the first
+		// wrap the container's parent is the canvas AREA rather than the shell, so
+		// the guard never matched and each call nested another shell — 14 shells and
+		// 14 legends for 3 charts in the browser.
+		const buildChart = () =>
+		{
+			const tmpCanvas = document.createElement('canvas');
+			const tmpContainer = document.createElement('div');
+			tmpContainer.appendChild(tmpCanvas);
+			document.body.appendChild(tmpContainer);
+			return {
+				canvas: tmpCanvas,
+				data: { datasets: [ { label: 'Reading' }, { label: 'Limit', pictLegendGroup: 'Limits' } ] },
+				getDatasetMeta: () => ({ hidden: false }),
+				update: () => {},
+			};
+		};
+
+		test('re-rendering reuses the shell instead of nesting another', () =>
+		{
+			const tmpProvider = new libChartInput(new libPict(), {});
+			const tmpChart = buildChart();
+			for (let i = 0; i < 5; i++)
+			{
+				tmpProvider.renderChartLegend('ReentrantChart', tmpChart, { Position: 'right' });
+			}
+			Expect(document.querySelectorAll('.pict-chart-shell').length, 'shells').to.equal(1);
+			Expect(document.querySelectorAll('.pict-chart-legend').length, 'legend panels').to.equal(1);
+			Expect(document.querySelectorAll('.pict-chart-shell .pict-chart-shell').length, 'nested shells').to.equal(0);
+			// Two datasets in two groups → two items, not ten.
+			Expect(document.querySelectorAll('.pict-chart-legend-item').length, 'items').to.equal(2);
+			Expect(tmpChart.canvas.closest('.pict-chart-canvas-area'), 'canvas still inside the area').to.be.ok;
+		});
+
+		test('the canvas is never detached from the document by a re-render', () =>
+		{
+			const tmpProvider = new libChartInput(new libPict(), {});
+			const tmpChart = buildChart();
+			tmpProvider.renderChartLegend('AttachedChart', tmpChart, { Position: 'right' });
+			tmpProvider.renderChartLegend('AttachedChart', tmpChart, { Position: 'right' });
+			Expect(document.body.contains(tmpChart.canvas)).to.equal(true);
+		});
+	});
+
 	suite('template', () =>
 	{
 		test('the chart canvas container carries the ChartHeight min-height', () =>

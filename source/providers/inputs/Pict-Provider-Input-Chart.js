@@ -204,9 +204,20 @@ class CustomInputHandler extends libPictSectionInputExtension
 		const tmpState = this.currentChartLegendState[pRawHTMLID] = this.currentChartLegendState[pRawHTMLID] || { Hidden: false, Collapsed: {} };
 		const tmpPosition = pLegendConfiguration.Position || 'right';
 
-		// Wrap the canvas once: shell > (canvas area | legend).
-		let tmpShell = tmpContainer.parentElement && tmpContainer.parentElement.classList.contains('pict-chart-shell')
-			? tmpContainer.parentElement : null;
+		// Wrap the canvas ONCE: shell > (canvas area | legend).
+		//
+		// After the first wrap the container's parent is the canvas AREA, not the
+		// shell, so testing the immediate parent for 'pict-chart-shell' never matches
+		// again and every re-render nests another shell inside the last -- 14 shells
+		// and 14 legends for 3 charts after a handful of toggles. Detect the wrapped
+		// shape by its own marker and climb to the shell.
+		let tmpShell = null;
+		const tmpExistingArea = tmpContainer.parentElement;
+		if (tmpExistingArea && tmpExistingArea.classList.contains('pict-chart-canvas-area')
+			&& tmpExistingArea.parentElement && tmpExistingArea.parentElement.classList.contains('pict-chart-shell'))
+		{
+			tmpShell = tmpExistingArea.parentElement;
+		}
 		if (!tmpShell)
 		{
 			tmpShell = document.createElement('div');
