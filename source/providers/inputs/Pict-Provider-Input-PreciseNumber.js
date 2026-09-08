@@ -28,6 +28,16 @@ class CustomInputHandler extends libPictSectionInputExtension
 
 	roundValue(pInput, pValue)
 	{
+		// A value that is not a number must render BLANK, never a formatted stand-in.
+		// Formatting one produced "NaN" in a tabular cell (from a null return) and
+		// "0.00" from undefined -- both of which read as real measurements. A
+		// running average is legitimately empty until its window fills, so this is
+		// the common case, not an edge case.
+		if ((pValue === null) || (typeof (pValue) === 'undefined') || (String(pValue).trim() === ''))
+		{
+			return '';
+		}
+
 		let tmpValue = pValue;
 
 		if ('DecimalPrecision' in pInput.PictForm)
