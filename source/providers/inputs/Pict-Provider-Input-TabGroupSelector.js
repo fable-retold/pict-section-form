@@ -71,11 +71,25 @@ class CustomInputHandler extends libPictSectionInputExtension
 	}
 
 	/**
+	 * Is this tab group hash actually one of the input's tabs?
+	 *
+	 * @param {Object} pInput - The input object.
+	 * @param {string} pTabGroupHash - The tab group hash to test.
+	 *
+	 * @return {boolean}
+	 */
+	isTabInSet(pInput, pTabGroupHash)
+	{
+		let tmpTabSet = pInput?.PictForm?.TabGroupSet;
+		return !!pTabGroupHash && Array.isArray(tmpTabSet) && (tmpTabSet.indexOf(pTabGroupHash) > -1);
+	}
+
+	/**
 	 * @param {string} pViewHash
 	 * @param {string} pInputHash
 	 * @param {string} pTabHash
 	 *
-	 * @return {boolean}
+	 * @return {boolean} - true once the tab is shown; false (nothing changed) if the view, input or tab hash is not valid.
 	 */
 	selectTabByViewHash(pViewHash, pInputHash, pTabHash)
 	{
@@ -98,6 +112,14 @@ class CustomInputHandler extends libPictSectionInputExtension
 		if (!(tmpInput?.PictForm?.TabGroupSet) || !Array.isArray(tmpInput.PictForm.TabGroupSet))
 		{
 			this.pict.log.error(`TabSelector input provider tried to switch to view [${pViewHash}] input [${pInputHash}] tab [${pTabHash}] but the input did not have a valid TabGroupSet array in the PictForm object!`)
+			return false;
+		}
+
+		// A hash that is not in the set matches nothing below, so it would hide EVERY group and leave no
+		// tab selected. Refuse it without touching anything; false already means "did not switch".
+		if (!this.isTabInSet(tmpInput, pTabHash))
+		{
+			this.pict.log.warn(`TabSelector input provider was asked for tab [${pTabHash}] on view [${pViewHash}] input [${pInputHash}] but it is not in the TabGroupSet; leaving the current tab selected.`);
 			return false;
 		}
 
@@ -166,8 +188,25 @@ class CustomInputHandler extends libPictSectionInputExtension
 		// TODO: Fix typescript types so this function has an optional rather than required fourth parameter.
 		this.pict.ContentAssignment.projectContent('replace', this.getTabSelectorInputHTMLID(pInput.Macro.RawHTMLID), tmpTabGroupSetEntries, 'FixTheTypescriptTypes');
 
-		// Now set the default tab (or first one)
-		const tmpDefaultTabGroupHash = (pInput.PictForm?.DefaultFromData !== false && pValue) || pInput.PictForm?.DefaultTabGroupHash || tmpTabSet[0];
+		// Now set the default tab (or first one). Take the first candidate that is actually one of this
+		// input's tabs, since selectTabByViewHash refuses anything else: a stored value can name a group
+		// since renamed or dropped from the manifest, and DefaultTabGroupHash can simply be a typo.
+		const tmpTabCandidates = [];
+		if (pInput.PictForm?.DefaultFromData !== false)
+		{
+			tmpTabCandidates.push(pValue);
+		}
+		tmpTabCandidates.push(pInput.PictForm?.DefaultTabGroupHash);
+
+		let tmpDefaultTabGroupHash = tmpTabSet[0];
+		for (let i = 0; i < tmpTabCandidates.length; i++)
+		{
+			if (this.isTabInSet(pInput, tmpTabCandidates[i]))
+			{
+				tmpDefaultTabGroupHash = tmpTabCandidates[i];
+				break;
+			}
+		}
 
 		this.selectTabByViewHash(pView.Hash, pInput.Hash, tmpDefaultTabGroupHash);
 

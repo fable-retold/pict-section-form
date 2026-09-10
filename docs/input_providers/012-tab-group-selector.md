@@ -84,7 +84,7 @@ Fallback default tab when value is empty:
 1. Generates tab button HTML
 2. Assigns to container element
 3. Applies CSS snippets for show/hide behavior
-4. Sets default tab based on value or DefaultTabGroupHash
+4. Sets the default tab: the stored value (unless `DefaultFromData` is false), else `DefaultTabGroupHash`, else the first tab. Hashes not in `TabGroupSet` are skipped.
 
 ### setCSSSnippets
 
@@ -97,6 +97,8 @@ Core method that:
 2. Shows selected group
 3. Updates tab button styling
 4. Updates input value
+
+Returns `true` once the tab is shown, and `false` without changing anything if the view, input or `TabGroupSet` is missing or the hash is not in `TabGroupSet`.
 
 ## Example: Complete Configuration
 
