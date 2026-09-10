@@ -110,23 +110,24 @@ suite('Pict-Section-Form - TabGroupSelector tab hash validation', () =>
 			Expect(tmpProvider.warnings).to.deep.equal([]);
 		});
 
-		test('falls back to the first tab instead of hiding every group', () =>
+		test('refuses a hash that is not in the set and changes nothing', () =>
 		{
 			const tmpInput = buildInput();
 			const tmpProvider = buildProvider(tmpInput);
-			Expect(tmpProvider.selectTabByViewHash('TestSection', 'TabInput', 'GroupGone')).to.equal(true);
-			// Exactly one group shown -- the regression was zero.
-			Expect(shownGroup(tmpProvider)).to.equal('#GROUP-F1-GroupOne');
+			Expect(tmpProvider.selectTabByViewHash('TestSection', 'TabInput', 'GroupGone')).to.equal(false);
+			Expect(tmpProvider.added).to.deep.equal([]);
+			Expect(tmpProvider.removed).to.deep.equal([]);
+			Expect(tmpProvider.written).to.deep.equal([]);
 			Expect(tmpProvider.warnings.length).to.equal(1);
 			Expect(tmpProvider.warnings[0]).to.contain('GroupGone');
 		});
 
-		test('repairs the stored value when it falls back', () =>
+		test('refuses when TabGroupSet is empty', () =>
 		{
-			const tmpInput = buildInput();
+			const tmpInput = buildInput({ TabGroupSet: [] });
 			const tmpProvider = buildProvider(tmpInput);
-			tmpProvider.selectTabByViewHash('TestSection', 'TabInput', 'GroupGone');
-			Expect(tmpProvider.written).to.deep.equal([ 'GroupOne' ]);
+			Expect(tmpProvider.selectTabByViewHash('TestSection', 'TabInput', 'GroupOne')).to.equal(false);
+			Expect(tmpProvider.written).to.deep.equal([]);
 		});
 	});
 

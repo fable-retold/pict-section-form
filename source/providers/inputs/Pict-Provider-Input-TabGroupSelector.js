@@ -89,7 +89,7 @@ class CustomInputHandler extends libPictSectionInputExtension
 	 * @param {string} pInputHash
 	 * @param {string} pTabHash
 	 *
-	 * @return {boolean}
+	 * @return {boolean} - true once the tab is shown; false (nothing changed) if the view, input or tab hash is not valid.
 	 */
 	selectTabByViewHash(pViewHash, pInputHash, pTabHash)
 	{
@@ -115,20 +115,18 @@ class CustomInputHandler extends libPictSectionInputExtension
 			return false;
 		}
 
-		// A hash that is not in the set matches nothing below, which would hide EVERY group and leave
-		// no tab selected -- a blank section the user cannot click their way out of. Fall back to the
-		// first tab; the write at the end of this method then repairs the stored value.
-		let tmpTabHash = pTabHash;
-		if (!this.isTabInSet(tmpInput, tmpTabHash))
+		// A hash that is not in the set matches nothing below, so it would hide EVERY group and leave no
+		// tab selected. Refuse it without touching anything; false already means "did not switch".
+		if (!this.isTabInSet(tmpInput, pTabHash))
 		{
-			tmpTabHash = tmpInput.PictForm.TabGroupSet[0];
-			this.pict.log.warn(`TabSelector input provider was asked for tab [${pTabHash}] on view [${pViewHash}] input [${pInputHash}] but it is not in the TabGroupSet; falling back to [${tmpTabHash}].`);
+			this.pict.log.warn(`TabSelector input provider was asked for tab [${pTabHash}] on view [${pViewHash}] input [${pInputHash}] but it is not in the TabGroupSet; leaving the current tab selected.`);
+			return false;
 		}
 
 		for (let i = 0; i < tmpInput.PictForm.TabGroupSet.length; i++)
 		{
 			let tmpTabGroupHash = tmpInput.PictForm.TabGroupSet[i];
-			if (tmpTabGroupHash != tmpTabHash)
+			if (tmpTabGroupHash != pTabHash)
 			{
 				// Hide this tab group if it isn't the "expected to be visible" group
 				this.pict.ContentAssignment.addClass(this.getGroupSelector(tmpView, tmpTabGroupHash), this.cssHideClass);
@@ -141,7 +139,7 @@ class CustomInputHandler extends libPictSectionInputExtension
 				this.pict.ContentAssignment.addClass(this.getTabSelector(tmpView, tmpInput, tmpTabGroupHash), this.cssSelectedTabClass);
 			}
 		}
-		tmpView.setDataByInput(tmpInput, tmpTabHash);
+		tmpView.setDataByInput(tmpInput, pTabHash);
 		return true;
 	}
 
@@ -190,10 +188,9 @@ class CustomInputHandler extends libPictSectionInputExtension
 		// TODO: Fix typescript types so this function has an optional rather than required fourth parameter.
 		this.pict.ContentAssignment.projectContent('replace', this.getTabSelectorInputHTMLID(pInput.Macro.RawHTMLID), tmpTabGroupSetEntries, 'FixTheTypescriptTypes');
 
-		// Now set the default tab (or first one). Each candidate has to be a tab this input actually
-		// has: a stored value can name a group that has since been renamed or dropped from the
-		// manifest, and DefaultTabGroupHash can simply be a typo. Either one used as-is selects
-		// nothing and renders the section blank.
+		// Now set the default tab (or first one). Take the first candidate that is actually one of this
+		// input's tabs, since selectTabByViewHash refuses anything else: a stored value can name a group
+		// since renamed or dropped from the manifest, and DefaultTabGroupHash can simply be a typo.
 		const tmpTabCandidates = [];
 		if (pInput.PictForm?.DefaultFromData !== false)
 		{
