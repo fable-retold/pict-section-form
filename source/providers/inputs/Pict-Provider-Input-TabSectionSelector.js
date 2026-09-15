@@ -77,11 +77,25 @@ class CustomInputHandler extends libPictSectionInputExtension
 	}
 
 	/**
+	 * Is this tab section hash actually one of the input's tabs?
+	 *
+	 * @param {Object} pInput - The input object.
+	 * @param {string} pTabSectionHash - The tab section hash to test.
+	 *
+	 * @return {boolean}
+	 */
+	isTabInSet(pInput, pTabSectionHash)
+	{
+		let tmpTabSet = pInput?.PictForm?.TabSectionSet;
+		return !!pTabSectionHash && Array.isArray(tmpTabSet) && (tmpTabSet.indexOf(pTabSectionHash) > -1);
+	}
+
+	/**
 	 * @param {string} pViewHash
 	 * @param {string} pInputHash
 	 * @param {string} pTabViewHash
 	 *
-	 * @return {boolean}
+	 * @return {boolean} - true once the section is shown; false (nothing changed) if the view, input or tab hash is not valid.
 	 */
 	selectTabByViewHash(pViewHash, pInputHash, pTabViewHash)
 	{
@@ -104,6 +118,13 @@ class CustomInputHandler extends libPictSectionInputExtension
 		if (!(tmpInput?.PictForm?.TabSectionSet) || !Array.isArray(tmpInput.PictForm.TabSectionSet))
 		{
 			this.pict.log.error(`TabSelector input provider tried to switch to view [${pViewHash}] input [${pInputHash}] tab [${pTabViewHash}] but the input did not have a valid TabSectionSet array in the PictForm object!`)
+			return false;
+		}
+		// A hash that is not in the set matches nothing below, so it would hide EVERY section and leave no
+		// tab selected. Refuse it without touching anything; false already means "did not switch".
+		if (!this.isTabInSet(tmpInput, pTabViewHash))
+		{
+			this.pict.log.warn(`TabSelector input provider was asked for tab [${pTabViewHash}] on view [${pViewHash}] input [${pInputHash}] but it is not in the TabSectionSet; leaving the current tab selected.`);
 			return false;
 		}
 		let tmpTabView = this.pict.views[this.getViewHash(pTabViewHash)];
@@ -180,8 +201,26 @@ class CustomInputHandler extends libPictSectionInputExtension
 		// TODO: Fix typescript types so this function has an optional rather than required fourth parameter.
 		this.pict.ContentAssignment.projectContent('replace', this.getTabSelectorInputHTMLID(pInput.Macro.RawHTMLID), tmpTabSectionSetEntries, 'FixTheTypescriptTypes');
 
-		// Now set the default tab (or first one)
-		const tmpDefaultTabSectionHash = (pInput.PictForm?.DefaultFromData !== false && pValue) || pInput.PictForm?.DefaultTabSectionHash || tmpTabSet[0];
+		// Now set the default tab (or first one). Take the first candidate that is actually one of this
+		// input's tabs, since selectTabByViewHash refuses anything else: a stored value can name a section
+		// since renamed or dropped from the manifest, and DefaultTabSectionHash can simply be a typo.
+		const tmpTabCandidates = [];
+		if (pInput.PictForm?.DefaultFromData !== false)
+		{
+			tmpTabCandidates.push(pValue);
+		}
+		tmpTabCandidates.push(pInput.PictForm?.DefaultTabSectionHash);
+
+		let tmpDefaultTabSectionHash = tmpTabSet[0];
+		for (let i = 0; i < tmpTabCandidates.length; i++)
+		{
+			if (this.isTabInSet(pInput, tmpTabCandidates[i]))
+			{
+				tmpDefaultTabSectionHash = tmpTabCandidates[i];
+				break;
+			}
+		}
+
 		this.selectTabByViewHash(pView.Hash, pInput.Hash, tmpDefaultTabSectionHash);
 
 		return super.onInputInitialize(pView, pGroup, pRow, pInput, pValue, pHTMLTabSelector, pTransactionGUID);

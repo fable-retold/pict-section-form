@@ -84,7 +84,7 @@ Fallback default section when value is empty:
 1. Resolves section hashes to view hashes via metacontroller
 2. Generates tab button HTML
 3. Applies CSS for visibility control
-4. Sets default section based on value or DefaultTabSectionHash
+4. Sets the default section: the stored value (unless `DefaultFromData` is false), else `DefaultTabSectionHash`, else the first section. Hashes not in `TabSectionSet` are skipped.
 
 ### getViewHash
 
@@ -98,6 +98,8 @@ Core method that:
 2. Shows selected section
 3. Updates tab button styling
 4. Updates input value
+
+Returns `true` once the section is shown, and `false` without changing anything if the view, input, `TabSectionSet` or section view is missing or the hash is not in `TabSectionSet`.
 
 ## Example: Multi-Page Form
 
