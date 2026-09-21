@@ -179,7 +179,6 @@ const LABEL_PROPERTIES =
 const KNOWN_OPEN =
 {
 	UndeclaredSolverTargets: 'a solver can assign to a name no descriptor declares (Scratch), and the expression parser assigns an expression with no assignment of its own to Result; neither is nested into the copy, so the copies share them',
-	ValidationSolvers: 'an injected manifest\'s ValidationSolvers are translated, but bootstrapPictFormViewsFromManifest does not merge them into the form, so they never run for an injected copy (CheckedTotal stays unset)',
 	SharedTriggerGroupHash: 'a trigger group hash is not salted, so a change in one copy also runs the matching trigger group in the other; each copy still reads and writes only its own data',
 };
 

@@ -612,6 +612,27 @@ suite('PictSectionForm injection conformance', () =>
 			}
 		});
 
+		test('each copy runs its own validation solvers against its own data', () =>
+		{
+			for (const tmpSalt of _Cases.SALTS)
+			{
+				const tmpExpected = Number(getValue(`${tmpSalt}.Area`)) + Number(getValue(`${tmpSalt}.Count`));
+				Expect(Number(getValue(`${tmpSalt}.CheckedTotal`)), `${tmpSalt}.CheckedTotal`).to.equal(tmpExpected);
+			}
+			Expect(getValue('CheckedTotal'), 'unsalted CheckedTotal').to.equal(undefined);
+		});
+
+		test('the form holds each copy\'s validation solvers once', () =>
+		{
+			const tmpExpressions = (_BootedPict.views.PictFormMetacontroller.manifestDescription.ValidationSolvers || [])
+				.map((pSolver) => (typeof(pSolver) === 'string') ? pSolver : pSolver.Expression);
+			for (const tmpSalt of _Cases.SALTS)
+			{
+				const tmpOwnExpressions = tmpExpressions.filter((pExpression) => new RegExp(`\\bCheckedTotal_${tmpSalt}\\b`).test(pExpression));
+				Expect(tmpOwnExpressions, `${tmpSalt} validation solvers`).to.have.length(1);
+			}
+		});
+
 		test('the unsalted root keeps the values the host put there', () =>
 		{
 			for (const [ tmpKey, tmpValue ] of Object.entries(_Cases.ROOT_DECOYS))

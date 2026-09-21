@@ -323,4 +323,38 @@ suite('PictFormMetacontroller distinct manifests', () =>
 			Expect(tmpSharedHashes).to.deep.equal([]);
 		});
 	});
+
+	suite('mergeValidationSolvers', () =>
+	{
+		test('appends the validation solvers of each salted copy after the form\'s own, in order', () =>
+		{
+			const tmpMetacontroller = buildMetacontroller(MARSHAL_DESTINATION);
+			const tmpForm = { ValidationSolvers: [ 'CrateCount = 1' ] };
+			const tmpFirst = tmpMetacontroller.createDistinctManifest(_EdgeCaseManifests.InjectableManifest, 'alpha');
+			const tmpSecond = tmpMetacontroller.createDistinctManifest(_EdgeCaseManifests.InjectableManifest, 'alphabeta');
+			Expect(tmpMetacontroller.mergeValidationSolvers(tmpForm, tmpFirst)).to.equal(1);
+			Expect(tmpMetacontroller.mergeValidationSolvers(tmpForm, tmpSecond)).to.equal(1);
+			Expect(tmpForm.ValidationSolvers).to.deep.equal([ 'CrateCount = 1' ].concat(tmpFirst.ValidationSolvers, tmpSecond.ValidationSolvers));
+		});
+
+		test('adding the same copy again does not add its validation solvers twice', () =>
+		{
+			const tmpMetacontroller = buildMetacontroller(MARSHAL_DESTINATION);
+			const tmpForm = { };
+			const tmpSalted = tmpMetacontroller.createDistinctManifest(_EdgeCaseManifests.InjectableManifest, SALT);
+			tmpSalted.ValidationSolvers.push({ Ordinal: 2, Expression: 'Checked = 1' });
+			Expect(tmpMetacontroller.mergeValidationSolvers(tmpForm, tmpSalted)).to.equal(2);
+			Expect(tmpMetacontroller.mergeValidationSolvers(tmpForm, tmpSalted)).to.equal(0);
+			Expect(tmpForm.ValidationSolvers).to.deep.equal(tmpSalted.ValidationSolvers);
+			Expect(tmpForm.ValidationSolvers[1]).to.not.equal(tmpSalted.ValidationSolvers[1]);
+		});
+
+		test('leaves the form alone when the added manifest has no validation solvers', () =>
+		{
+			const tmpMetacontroller = buildMetacontroller(MARSHAL_DESTINATION);
+			const tmpForm = { };
+			Expect(tmpMetacontroller.mergeValidationSolvers(tmpForm, { Descriptors: { } })).to.equal(0);
+			Expect(tmpForm).to.deep.equal({ });
+		});
+	});
 });

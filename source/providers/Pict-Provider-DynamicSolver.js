@@ -569,7 +569,7 @@ class PictDynamicSolver extends libPictProvider
 			{
 				this.pict.log.trace(`Running validation solver ordinal ${tmpSolver.Ordinal} [${tmpSolver.Expression}]`);
 			}
-			this.pict.ExpressionParser.solve(tmpSolver.Expression, tmpMarshalDestination, pSolverResultsMap, this.pict.manifest, this.pict.AppData);
+			this.pict.ExpressionParser.solve(tmpSolver.Expression, tmpMarshalDestination, pSolverResultsMap, this.pict.manifest, tmpMarshalDestination);
 		}
 	}
 

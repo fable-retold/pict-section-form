@@ -94,8 +94,11 @@ the cases file and both tiers print them rather than failing on them:
 * **Undeclared solver targets.** A solver can assign to a name no descriptor declares, and the expression
   parser assigns an expression that has no assignment of its own to `Result`. Neither is nested into the copy,
   so copies share them.
-* **Validation solvers.** An injected manifest's `ValidationSolvers` are translated, but the injection merge
-  does not carry them into the form, so they never run for an injected copy.
 * **Shared trigger group hashes.** A trigger group hash is not salted, so a change in one copy also runs the
   matching trigger group in the other. Each copy still reads and writes only its own data; a trigger group is
   allowed to span a host form and what is injected into it.
+
+Not declared in `KNOWN_OPEN`, because neither tier exercises it: the library has no way to remove an injected
+copy. Injection appends the copy's sections, descriptors and (translated, de-duplicated) `ValidationSolvers`
+to the form's manifest; a host that tears a copy down again has to take its validation solvers out of
+`manifestDescription.ValidationSolvers` too, or they keep running against the removed copy's data.

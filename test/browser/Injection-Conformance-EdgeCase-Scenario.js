@@ -76,7 +76,7 @@ async function run(pContext)
 		}
 		pContext.checkEqual(`${tmpSalt}: a record set solver uses its own row rather than the same-named input`, (pContext.getValue(`${tmpSalt}.Rows`) || []).map((pRow) => pRow.Line), tmpCopy.Lines);
 		pContext.checkEqual(`${tmpSalt}: FromScratch reads its own undeclared solver target`, pContext.getValue(`${tmpSalt}.FromScratch`), tmpCopy.FromScratch, 'open');
-		pContext.check(`${tmpSalt}: an injected manifest's ValidationSolvers run`, pContext.getValue(`${tmpSalt}.CheckedTotal`) != null, _Cases.KNOWN_OPEN.ValidationSolvers, 'open');
+		pContext.checkEqual(`${tmpSalt}: an injected manifest's ValidationSolvers run against its own data`, pContext.getValue(`${tmpSalt}.CheckedTotal`), Number(pContext.getValue(`${tmpSalt}.Area`)) + Number(pContext.getValue(`${tmpSalt}.Count`)));
 	}
 
 	// Section visibility driven by a solver

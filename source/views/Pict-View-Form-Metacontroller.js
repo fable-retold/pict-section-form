@@ -1668,6 +1668,41 @@ class PictFormMetacontroller extends libPictViewClass
 	}
 
 	/**
+	 * Appends the validation solvers of a manifest being added to the form onto the form's own, in order,
+	 * skipping any the form already holds so adding the same manifest again does not run its solvers twice.
+	 *
+	 * @param {Record<string, any>} pTargetManifest - The form's manifest description, which receives the solvers.
+	 * @param {Record<string, any>} pSourceManifest - The manifest being added to the form.
+	 *
+	 * @return {number} The number of validation solvers added.
+	 */
+	mergeValidationSolvers(pTargetManifest, pSourceManifest)
+	{
+		if (!pTargetManifest || !pSourceManifest || !Array.isArray(pSourceManifest.ValidationSolvers) || (pSourceManifest.ValidationSolvers.length < 1))
+		{
+			return 0;
+		}
+		if (!Array.isArray(pTargetManifest.ValidationSolvers))
+		{
+			pTargetManifest.ValidationSolvers = [];
+		}
+		const tmpExistingSolvers = new Set(pTargetManifest.ValidationSolvers.map((pSolver) => JSON.stringify(pSolver)));
+		let tmpAddedCount = 0;
+		for (const tmpSolver of pSourceManifest.ValidationSolvers)
+		{
+			const tmpSolverKey = JSON.stringify(tmpSolver);
+			if (tmpExistingSolvers.has(tmpSolverKey))
+			{
+				continue;
+			}
+			tmpExistingSolvers.add(tmpSolverKey);
+			pTargetManifest.ValidationSolvers.push(JSON.parse(tmpSolverKey));
+			++tmpAddedCount;
+		}
+		return tmpAddedCount;
+	}
+
+	/**
 	 * Clears out the manifest description set on the meta controller.
 	 */
 	clearManifestDescription()
@@ -1726,6 +1761,7 @@ class PictFormMetacontroller extends libPictViewClass
 				}
 				this.stashedManifestDescription.ReferenceManifests[tmpKey] = JSON.parse(JSON.stringify(this.manifestDescription.ReferenceManifests[tmpKey]));
 			}
+			this.mergeValidationSolvers(this.stashedManifestDescription, this.manifestDescription);
 			let tmpInsertAtIndex = this.stashedManifestDescription.Sections.findIndex((pSection) => pSection.Hash == pAfterSectionHash);
 			if (tmpInsertAtIndex < 0)
 			{

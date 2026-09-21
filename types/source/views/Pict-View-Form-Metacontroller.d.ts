@@ -252,6 +252,16 @@ declare class PictFormMetacontroller extends libPictViewClass {
      */
     marshalInputToView(pInputHashes: string | string[]): void;
     /**
+     * Appends the validation solvers of a manifest being added to the form onto the form's own, in order,
+     * skipping any the form already holds so adding the same manifest again does not run its solvers twice.
+     *
+     * @param {Record<string, any>} pTargetManifest - The form's manifest description, which receives the solvers.
+     * @param {Record<string, any>} pSourceManifest - The manifest being added to the form.
+     *
+     * @return {number} The number of validation solvers added.
+     */
+    mergeValidationSolvers(pTargetManifest: Record<string, any>, pSourceManifest: Record<string, any>): number;
+    /**
      * Clears out the manifest description set on the meta controller.
      */
     clearManifestDescription(): void;
