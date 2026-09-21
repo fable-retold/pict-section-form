@@ -17,6 +17,7 @@
   - [Comprehensions](Comprehensions.md)
   - [Comprehensions - Advanced](Comprehensions_Advanced.md)
   - [Providers](Providers.md)
+  - [Injection Conformance](Injection_Conformance.md)
 
 - Playground
 

@@ -7,6 +7,26 @@ const libPictViewDynamicForm = require('./Pict-View-DynamicForm.js');
 // TODO: Manage view lifecycle internally, including destruction of views if they are flagged to not be needed.
 // Why?  This allows us to dynamically add and remove sections without having to reload the application.
 
+// Solver directives iterate: their headers name addresses to iterate over, and declare iteration variables
+// that are locals of the expression rather than anything the manifest owns.
+const SOLVER_DIRECTIVE_CODES = new Set([ 'SERIES', 'MONTECARLO', 'MAP', 'MULTIROWMAP' ]);
+
+// Everything an injected copy of a manifest can say about itself, grouped by how createDistinctManifest has
+// to translate it. These drive the translation below and are exported as the checklist the injection
+// conformance tests measure fixture coverage against, so a new construct cannot be added in one place only.
+const INJECTION_INPUT_SECTION_HASH_PROPERTIES = [ 'TabSectionSet', 'DefaultTabSectionHash' ];
+const INJECTION_INPUT_GROUP_HASH_PROPERTIES = [ 'TabGroupSet', 'DefaultTabGroupHash' ];
+const INJECTION_INPUT_SOLVER_PROPERTIES = [ 'ChartLabelsSolver', 'ChartConfigCorePrototype' ];
+const INJECTION_INPUT_SOLVER_SET_PROPERTIES = [ { Property: 'ChartDatasetsSolvers', SolverProperty: 'DataSolver' } ];
+const INJECTION_INPUT_ADDRESS_PROPERTIES = [ 'ChartLabelsAddress', 'ChartDatasetsAddress', 'ChartConfigCorePrototypeAddress' ];
+const INJECTION_INPUT_TRIGGER_GROUP_PROPERTIES = [ 'AutofillTriggerGroup', 'TemplatedEntityLookup' ];
+const INJECTION_INPUT_TEMPLATE_PROPERTIES = [ 'Template' ];
+const INJECTION_INPUT_ENTITY_BUNDLE_PROPERTIES = [ 'EntitiesBundle' ];
+const INJECTION_ENTITY_BUNDLE_ADDRESS_PROPERTIES = [ 'Destination' ];
+const INJECTION_ENTITY_BUNDLE_TEMPLATE_PROPERTIES = [ 'Filter', 'EntityFilterTemplate' ];
+const INJECTION_TRIGGER_GROUP_SOLVER_PROPERTIES = [ 'PreSolvers', 'PostSolvers' ];
+const INJECTION_MANIFEST_CONSTRUCTS = [ 'Sections.Solvers', 'Sections.Groups.RecordSetAddress', 'Sections.Groups.RecordSetSolvers', 'ReferenceManifests', 'ValidationSolvers', 'Descriptors.DataAddress', 'Descriptors.Hash', 'Descriptors.PictForm.Section', 'Descriptors.PictForm.Group' ];
+
 const PENDING_ASYNC_OPERATION_TYPE = 'PendingAsyncOperation';
 const TRANSACTION_COMPLETE_CALLBACK_TYPE = 'onTransactionComplete';
 const READY_TO_FINALIZE_TYPE = 'ReadyToFinalize';
@@ -333,18 +353,148 @@ class PictFormMetacontroller extends libPictViewClass
 	}
 
 	/**
+	 * Translates a reference to something the manifest owns -- an exact hash or address, or a reference that
+	 * only starts with one (`Rows.length`, `Rows[0].Line`, `Crate.Items.length`), where the longest address
+	 * the reference starts with wins.
+	 *
+	 * @param {string} pReference - The reference to translate.
+	 * @param {Record<string, string>} pPrimaryTranslation - Consulted first: hashes for symbols, addresses for address-shaped references.
+	 * @param {Record<string, string>} pSecondaryTranslation - Consulted second.
+	 * @param {Record<string, string>} [pPrefixTranslation] - Addresses that a partial reference may start with.
+	 *
+	 * @return {string|null} The translated reference, or null when the manifest does not own it.
+	 */
+	translateManifestReference(pReference, pPrimaryTranslation, pSecondaryTranslation, pPrefixTranslation)
+	{
+		if ((typeof(pReference) !== 'string') || (pReference.length === 0))
+		{
+			return null;
+		}
+		const tmpPrefixTranslation = pPrefixTranslation || { };
+		if (pReference in pPrimaryTranslation)
+		{
+			return pPrimaryTranslation[pReference];
+		}
+		if (pReference in pSecondaryTranslation)
+		{
+			return pSecondaryTranslation[pReference];
+		}
+		if (pReference in tmpPrefixTranslation)
+		{
+			return tmpPrefixTranslation[pReference];
+		}
+		for (let i = pReference.length - 1; i > 0; i--)
+		{
+			if ((pReference[i] !== '.') && (pReference[i] !== '['))
+			{
+				continue;
+			}
+			const tmpPrefix = pReference.substring(0, i);
+			if (tmpPrefix in tmpPrefixTranslation)
+			{
+				return `${tmpPrefixTranslation[tmpPrefix]}${pReference.substring(i)}`;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Finds the SERIES / MAP / MULTIROWMAP / MONTECARLO directive in a tokenized solver expression, if there
+	 * is one, and reads its header the way the expression parser does: which header positions hold an address
+	 * to iterate over (everything else in a header, keyword or not, is not a reference to translate -- notably
+	 * the per-row property a MULTIROWMAP variable reads), and which names the body sees as iteration variables
+	 * rather than as addresses.
+	 *
+	 * @param {Array<string>} pTokens - The raw tokens of the expression.
+	 *
+	 * @return {{ Code: string, HeaderStart: number, HeaderEnd: number, TranslateIndices: Set<number>, Locals: Set<string> }|null} null when the expression has no directive.
+	 */
+	parseSolverDirectiveScope(pTokens)
+	{
+		let tmpDirectiveIndex = -1;
+		for (let i = 0; i < pTokens.length; i++)
+		{
+			if (SOLVER_DIRECTIVE_CODES.has(String(pTokens[i]).toUpperCase()) && ((i === 0) || (pTokens[i - 1] === '=') || (pTokens[i - 1] === '?=')))
+			{
+				tmpDirectiveIndex = i;
+				break;
+			}
+		}
+		if (tmpDirectiveIndex < 0)
+		{
+			return null;
+		}
+		const tmpHeaderEnd = pTokens.indexOf(':', tmpDirectiveIndex + 1);
+		if (tmpHeaderEnd < 0)
+		{
+			return null;
+		}
+		const tmpCode = String(pTokens[tmpDirectiveIndex]).toUpperCase();
+		const tmpTranslateIndices = new Set();
+		const tmpLocals = new Set([ 'stepIndex' ]);
+		if (tmpCode === 'SERIES')
+		{
+			tmpLocals.add('n');
+			tmpLocals.add('prev_n');
+		}
+		if (tmpCode === 'MULTIROWMAP')
+		{
+			tmpLocals.add('rowIndex');
+		}
+		for (let i = tmpDirectiveIndex + 1; i < tmpHeaderEnd; i++)
+		{
+			const tmpToken = String(pTokens[i]).toUpperCase();
+			const tmpPreviousToken = String(pTokens[i - 1]).toUpperCase();
+			if ((tmpCode === 'SERIES') && ((tmpPreviousToken === 'FROM') || (tmpPreviousToken === 'TO') || (tmpPreviousToken === 'STEP')))
+			{
+				tmpTranslateIndices.add(i);
+				continue;
+			}
+			if ((tmpToken !== 'VAR') && (tmpToken !== 'VARIABLE') && (tmpToken !== 'V'))
+			{
+				if ((tmpCode === 'MULTIROWMAP') && (tmpToken === 'ROWS') && (String(pTokens[i + 1]).toUpperCase() === 'FROM') && ((i + 2) < tmpHeaderEnd))
+				{
+					tmpTranslateIndices.add(i + 2);
+				}
+				continue;
+			}
+			const tmpVariableIndex = i + 1;
+			if (tmpVariableIndex >= tmpHeaderEnd)
+			{
+				continue;
+			}
+			tmpLocals.add(String(pTokens[tmpVariableIndex]));
+			if (tmpCode === 'MAP')
+			{
+				tmpLocals.add(`prev_${pTokens[tmpVariableIndex]}`);
+				if ((String(pTokens[tmpVariableIndex + 1]).toUpperCase() === 'FROM') && ((tmpVariableIndex + 2) < tmpHeaderEnd))
+				{
+					tmpTranslateIndices.add(tmpVariableIndex + 2);
+				}
+			}
+		}
+		return { Code: tmpCode, HeaderStart: tmpDirectiveIndex, HeaderEnd: tmpHeaderEnd, TranslateIndices: tmpTranslateIndices, Locals: tmpLocals };
+	}
+
+	/**
 	 * Rewrite a solver expression by tokenizing, replacing address/hash tokens, and recomposing.
 	 *
 	 * @param {string} pExpression - The solver expression string.
 	 * @param {Record<string, string>} pHashTranslation - A mapping of original hashes to new hashes for replacement.
 	 * @param {Record<string, string>} pAddressTranslation - A mapping of original addresses to new addresses for replacement.
+	 * @param {{ PrefixAddressTranslation?: Record<string, string>, RowRelative?: boolean }} [pOptions] - PrefixAddressTranslation holds the addresses a partial reference may start with (defaults to pAddressTranslation); RowRelative marks an expression solved against a record of a record set rather than against the manifest.
 	 *
 	 * @return {string} The rewritten expression, or the original if no changes were made.
 	 */
-	rewriteSolverExpression(pExpression, pHashTranslation, pAddressTranslation)
+	rewriteSolverExpression(pExpression, pHashTranslation, pAddressTranslation, pOptions)
 	{
 		const tmpHashTranslation = pHashTranslation || { };
 		const tmpAddressTranslation = pAddressTranslation || { };
+		const tmpOptions = pOptions || { };
+		const tmpPrefixAddressTranslation = tmpOptions.PrefixAddressTranslation || tmpAddressTranslation;
+		// A record set solver is solved against one record of the set, so a bare reference in it names a column
+		// of that record; only references that are absolute can be ours to translate.
+		const tmpRowRelative = Boolean(tmpOptions.RowRelative);
 
 		// Use the expression parser tokenizer for discrete token-based solver rewriting.
 		// This avoids the regex word-boundary issues when hash and address are the same string.
@@ -356,11 +506,41 @@ class PictFormMetacontroller extends libPictViewClass
 			return pExpression;
 		}
 
+		/**
+		 * @param {string} pReference - The reference held by the token.
+		 * @param {boolean} pPreferHash - Whether a hash translation wins over an address translation.
+		 * @param {boolean} pManifestRelative - Whether a bare reference resolves against the manifest.
+		 *
+		 * @return {string|null} The translated reference, or null when nothing matched.
+		 */
+		const translateReference = (pReference, pPreferHash, pManifestRelative) =>
+		{
+			if (pManifestRelative)
+			{
+				const tmpTranslated = this.translateManifestReference(pReference, pPreferHash ? tmpHashTranslation : tmpAddressTranslation, pPreferHash ? tmpAddressTranslation : tmpHashTranslation, tmpPrefixAddressTranslation);
+				if (tmpTranslated !== null)
+				{
+					return tmpTranslated;
+				}
+			}
+			if (tmpMarshalDestination && pReference.startsWith(`${tmpMarshalDestination}.`))
+			{
+				// Behind the marshal destination the reference is an address, so addresses win over hashes.
+				const tmpTranslated = this.translateManifestReference(pReference.substring(tmpMarshalDestination.length + 1), tmpAddressTranslation, tmpHashTranslation, tmpPrefixAddressTranslation);
+				if (tmpTranslated !== null)
+				{
+					return `${tmpMarshalDestination}.${tmpTranslated}`;
+				}
+			}
+			return null;
+		};
+
 		let tmpResultObject = {};
 		tmpExpressionParser.tokenize(pExpression, tmpResultObject);
 
 		let tmpTokens = Array.from(tmpResultObject.OriginalRawTokens);
 		let tmpModified = false;
+		const tmpDirectiveScope = this.parseSolverDirectiveScope(tmpTokens);
 
 		// Function context stack for tracking string parameters inside annotated functions
 		let tmpFunctionStack = [];
@@ -370,6 +550,18 @@ class PictFormMetacontroller extends libPictViewClass
 		{
 			let tmpToken = tmpTokens[i];
 			let tmpTokenType = tmpExpressionParser.Tokenizer.getTokenType(tmpToken);
+
+			if (tmpDirectiveScope)
+			{
+				if ((i >= tmpDirectiveScope.HeaderStart) && (i <= tmpDirectiveScope.HeaderEnd) && !tmpDirectiveScope.TranslateIndices.has(i))
+				{
+					continue;
+				}
+				if ((i > tmpDirectiveScope.HeaderEnd) && tmpDirectiveScope.Locals.has(String(tmpToken).replace(/^\{|\}$/g, '').split(/[.[]/)[0]))
+				{
+					continue;
+				}
+			}
 
 			// Track parenthesis depth and function context
 			if (tmpToken === '(')
@@ -407,29 +599,7 @@ class PictFormMetacontroller extends libPictViewClass
 			// Token.Symbol -- check hash mappings then address mappings
 			if (tmpTokenType === 'Token.Symbol')
 			{
-				let tmpReplacement = null;
-
-				if (tmpToken in tmpHashTranslation)
-				{
-					tmpReplacement = tmpHashTranslation[tmpToken];
-				}
-				else if (tmpToken in tmpAddressTranslation)
-				{
-					tmpReplacement = tmpAddressTranslation[tmpToken];
-				}
-				// Check with viewMarshalDestination prefix stripped
-				else if (tmpMarshalDestination && tmpToken.startsWith(tmpMarshalDestination + '.'))
-				{
-					let tmpStripped = tmpToken.substring(tmpMarshalDestination.length + 1);
-					if (tmpStripped in tmpHashTranslation)
-					{
-						tmpReplacement = tmpMarshalDestination + '.' + tmpHashTranslation[tmpStripped];
-					}
-					else if (tmpStripped in tmpAddressTranslation)
-					{
-						tmpReplacement = tmpMarshalDestination + '.' + tmpAddressTranslation[tmpStripped];
-					}
-				}
+				const tmpReplacement = translateReference(tmpToken, true, !tmpRowRelative);
 
 				if (tmpReplacement !== null)
 				{
@@ -440,33 +610,11 @@ class PictFormMetacontroller extends libPictViewClass
 			// Token.StateAddress -- extract inner address, check mappings with and without marshal prefix
 			else if (tmpTokenType === 'Token.StateAddress')
 			{
-				let tmpInner = tmpToken.substring(1, tmpToken.length - 1);
-				let tmpReplacement = null;
-
-				if (tmpInner in tmpAddressTranslation)
-				{
-					tmpReplacement = '{' + tmpAddressTranslation[tmpInner] + '}';
-				}
-				else if (tmpInner in tmpHashTranslation)
-				{
-					tmpReplacement = '{' + tmpHashTranslation[tmpInner] + '}';
-				}
-				else if (tmpMarshalDestination && tmpInner.startsWith(tmpMarshalDestination + '.'))
-				{
-					let tmpStripped = tmpInner.substring(tmpMarshalDestination.length + 1);
-					if (tmpStripped in tmpAddressTranslation)
-					{
-						tmpReplacement = '{' + tmpMarshalDestination + '.' + tmpAddressTranslation[tmpStripped] + '}';
-					}
-					else if (tmpStripped in tmpHashTranslation)
-					{
-						tmpReplacement = '{' + tmpMarshalDestination + '.' + tmpHashTranslation[tmpStripped] + '}';
-					}
-				}
+				const tmpReplacement = translateReference(tmpToken.substring(1, tmpToken.length - 1), false, !tmpRowRelative);
 
 				if (tmpReplacement !== null)
 				{
-					tmpTokens[i] = tmpReplacement;
+					tmpTokens[i] = `{${tmpReplacement}}`;
 					tmpModified = true;
 				}
 			}
@@ -478,34 +626,12 @@ class PictFormMetacontroller extends libPictViewClass
 
 				if (tmpFuncEntry && Array.isArray(tmpFuncEntry.AddressParameterIndices) && tmpFuncEntry.AddressParameterIndices.includes(tmpCurrentFunc.paramIndex))
 				{
-					let tmpStringContent = tmpToken.substring(1, tmpToken.length - 1);
-					let tmpReplacement = null;
-
-					// Check hash mappings first (hash-style rewrite for string parameters)
-					if (tmpStringContent in tmpHashTranslation)
-					{
-						tmpReplacement = '"' + tmpHashTranslation[tmpStringContent] + '"';
-					}
-					else if (tmpStringContent in tmpAddressTranslation)
-					{
-						tmpReplacement = '"' + tmpAddressTranslation[tmpStringContent] + '"';
-					}
-					else if (tmpMarshalDestination && tmpStringContent.startsWith(tmpMarshalDestination + '.'))
-					{
-						let tmpStripped = tmpStringContent.substring(tmpMarshalDestination.length + 1);
-						if (tmpStripped in tmpHashTranslation)
-						{
-							tmpReplacement = '"' + tmpMarshalDestination + '.' + tmpHashTranslation[tmpStripped] + '"';
-						}
-						else if (tmpStripped in tmpAddressTranslation)
-						{
-							tmpReplacement = '"' + tmpMarshalDestination + '.' + tmpAddressTranslation[tmpStripped] + '"';
-						}
-					}
+					// String parameters name a hash or an absolute address, never a column of a record.
+					const tmpReplacement = translateReference(tmpToken.substring(1, tmpToken.length - 1), true, true);
 
 					if (tmpReplacement !== null)
 					{
-						tmpTokens[i] = tmpReplacement;
+						tmpTokens[i] = `"${tmpReplacement}"`;
 						tmpModified = true;
 					}
 				}
@@ -536,6 +662,12 @@ class PictFormMetacontroller extends libPictViewClass
 		const tmpManifest = JSON.parse(JSON.stringify(pManifest));
 		/** @type {Record<string, string>} */
 		const tmpAddressTranslation = {};
+		/** @type {Record<string, string>} */
+		const tmpSectionTranslation = {};
+		/** @type {Record<string, string>} */
+		const tmpGroupTranslation = {};
+		/** @type {Record<string, string>} */
+		const tmpRecordSetTranslation = {};
 		for (const tmpSection of tmpManifest.Sections || [])
 		{
 			if (!tmpSection.Hash)
@@ -545,6 +677,7 @@ class PictFormMetacontroller extends libPictViewClass
 			tmpSection.OriginalHash = tmpSection.Hash;
 			tmpSection.Hash = `${tmpSection.Hash}_${tmpUUID}`;
 			tmpAddressTranslation[tmpSection.OriginalHash] = tmpSection.Hash;
+			tmpSectionTranslation[tmpSection.OriginalHash] = tmpSection.Hash;
 			for (const tmpGroup of tmpSection.Groups || [])
 			{
 				if (!tmpGroup.Hash)
@@ -554,6 +687,14 @@ class PictFormMetacontroller extends libPictViewClass
 				tmpGroup.OriginalHash = tmpGroup.Hash;
 				tmpGroup.Hash = `${tmpGroup.Hash}_${tmpUUID}`;
 				tmpAddressTranslation[tmpGroup.OriginalHash] = tmpGroup.Hash;
+				tmpGroupTranslation[tmpGroup.OriginalHash] = tmpGroup.Hash;
+				if (tmpGroup.RecordSetAddress)
+				{
+					const tmpRecordSetAddress = `${tmpUUID}.${tmpGroup.RecordSetAddress}`;
+					this.pict.log.info(`PictFormMetacontroller.createDistinctManifest: Updated group record set address from "${tmpGroup.RecordSetAddress}" to "${tmpRecordSetAddress}".`);
+					tmpRecordSetTranslation[tmpGroup.RecordSetAddress] = tmpRecordSetAddress;
+					tmpGroup.RecordSetAddress = tmpRecordSetAddress;
+				}
 			}
 		}
 		/** @type {Record<string, ManifestDescriptor>} */
@@ -629,7 +770,7 @@ class PictFormMetacontroller extends libPictViewClass
 				const tmpTranslatedAddress = tmpAddressTranslation[tmpIterAddress].replace(new RegExp(`^${escapeRegExp(tmpOriginalAddress)}\\b`, 'g'), tmpUpdatedAddress);
 				if (tmpTranslatedAddress !== tmpAddressTranslation[tmpIterAddress])
 				{
-					this.pict.log.info(`DocumentDynamicSectionManager.createDistinctManifest: Updated address translation for "${tmpIterAddress}" from "${tmpAddressTranslation[tmpIterAddress]}" to "${tmpTranslatedAddress}".`);
+					this.pict.log.info(`PictFormMetacontroller.createDistinctManifest: Updated address translation for "${tmpIterAddress}" from "${tmpAddressTranslation[tmpIterAddress]}" to "${tmpTranslatedAddress}".`);
 					tmpAddressTranslation[tmpIterAddress] = tmpTranslatedAddress;
 					const [ tmpCurrentKey, tmpOriginalDescriptor ] = Object.entries(tmpManifest.Descriptors).find(([ pKey, pDescriptor ]) => pDescriptor.OriginalDataAddress === tmpIterAddress);
 					tmpManifest.Descriptors[tmpCurrentKey].DataAddress = tmpTranslatedAddress;
@@ -642,14 +783,27 @@ class PictFormMetacontroller extends libPictViewClass
 				}
 			}
 		}
+		// The addresses a partial reference (`Rows.length`, `Crate.Items[0]`) may start with: every address the
+		// manifest declares, plus the record set addresses, which have no descriptor of their own.
+		/** @type {Record<string, string>} */
+		const tmpPrefixAddressTranslation = Object.assign({}, tmpRecordSetTranslation);
+		for (const tmpDescriptor of Object.values(tmpManifest.Descriptors || {}))
+		{
+			if (tmpDescriptor.OriginalDataAddress)
+			{
+				tmpPrefixAddressTranslation[tmpDescriptor.OriginalDataAddress] = tmpDescriptor.DataAddress;
+			}
+		}
+
 		/**
 		 * Rewrite a single solver entry (string or object with Expression property).
 		 *
 		 * @param {Array} pSolverArray - The array of solvers to rewrite in.
 		 * @param {number} pIndex - The index of the solver to rewrite.
 		 * @param {string} pLogPrefix - Logging prefix for identification.
+		 * @param {{ RowRelative?: boolean }} [pSolverOptions] - Passed through to rewriteSolverExpression.
 		 */
-		const rewriteSolverEntry = (pSolverArray, pIndex, pLogPrefix) =>
+		const rewriteSolverEntry = (pSolverArray, pIndex, pLogPrefix, pSolverOptions) =>
 		{
 			const tmpSolver = pSolverArray[pIndex];
 			const tmpSolverExpression = typeof tmpSolver === 'string' ? tmpSolver : tmpSolver.Expression;
@@ -657,10 +811,10 @@ class PictFormMetacontroller extends libPictViewClass
 			{
 				return;
 			}
-			const tmpUpdatedSolver = this.rewriteSolverExpression(tmpSolverExpression, tmpHashTranslation, tmpAddressTranslation);
+			const tmpUpdatedSolver = this.rewriteSolverExpression(tmpSolverExpression, tmpHashTranslation, tmpAddressTranslation, Object.assign({ PrefixAddressTranslation: tmpPrefixAddressTranslation }, pSolverOptions));
 			if (tmpUpdatedSolver !== tmpSolverExpression)
 			{
-				this.pict.log.info(`DocumentDynamicSectionManager.createDistinctManifest: Updated ${pLogPrefix} ${pIndex} from "${tmpSolverExpression}" to "${tmpUpdatedSolver}".`);
+				this.pict.log.info(`PictFormMetacontroller.createDistinctManifest: Updated ${pLogPrefix} ${pIndex} from "${tmpSolverExpression}" to "${tmpUpdatedSolver}".`);
 				if (typeof tmpSolver === 'string')
 				{
 					pSolverArray[pIndex] = tmpUpdatedSolver;
@@ -683,18 +837,279 @@ class PictFormMetacontroller extends libPictViewClass
 			}
 			for (const tmpGroup of tmpSection.Groups || [])
 			{
-				if (tmpGroup.RecordSetAddress)
-				{
-					let tmpRecordSetAddress = `${tmpUUID}.${tmpGroup.RecordSetAddress}`;
-					this.pict.log.info(`DocumentDynamicSectionManager.createDistinctManifest: Updated group record set address from "${tmpGroup.RecordSetAddress}" to "${tmpRecordSetAddress}".`);
-					tmpGroup.RecordSetAddress = tmpRecordSetAddress;
-				}
 				if (Array.isArray(tmpGroup.RecordSetSolvers) && tmpGroup.RecordSetSolvers.length > 0)
 				{
 					for (let i = 0; i < tmpGroup.RecordSetSolvers.length; i++)
 					{
-						rewriteSolverEntry(tmpGroup.RecordSetSolvers, i, 'group solver reference');
+						rewriteSolverEntry(tmpGroup.RecordSetSolvers, i, 'group solver reference', { RowRelative: true });
 					}
+				}
+			}
+		}
+
+		/**
+		 * @param {any} pValue - A hash, or an array of hashes.
+		 * @param {Record<string, string>} pTranslation - The hashes this manifest owns.
+		 *
+		 * @return {any} The value, with any hash the manifest owns translated.
+		 */
+		const translateHashReference = (pValue, pTranslation) =>
+		{
+			if (typeof(pValue) === 'string')
+			{
+				return (pValue in pTranslation) ? pTranslation[pValue] : pValue;
+			}
+			if (Array.isArray(pValue))
+			{
+				return pValue.map((pHash) => (((typeof(pHash) === 'string') && (pHash in pTranslation)) ? pTranslation[pHash] : pHash));
+			}
+			return pValue;
+		};
+
+		/**
+		 * Configuration addresses resolve from the application root, so they are only ours when they point
+		 * into the marshal destination.
+		 *
+		 * @param {any} pAddress - The configured address.
+		 *
+		 * @return {any} The address, nested into this injection when the manifest owns it.
+		 */
+		const rewriteAbsoluteAddress = (pAddress) =>
+		{
+			const tmpMarshalDestination = this.viewMarshalDestination;
+			if ((typeof(pAddress) !== 'string') || !tmpMarshalDestination || !pAddress.startsWith(`${tmpMarshalDestination}.`))
+			{
+				return pAddress;
+			}
+			const tmpTranslated = this.translateManifestReference(pAddress.substring(tmpMarshalDestination.length + 1), tmpAddressTranslation, tmpHashTranslation, tmpPrefixAddressTranslation);
+			return (tmpTranslated === null) ? pAddress : `${tmpMarshalDestination}.${tmpTranslated}`;
+		};
+
+		/**
+		 * @param {any} pSolverExpression - A solver expression configured on an input.
+		 * @param {string} pLogPrefix - Logging prefix for identification.
+		 *
+		 * @return {any} The rewritten expression.
+		 */
+		const rewriteSolverValue = (pSolverExpression, pLogPrefix) =>
+		{
+			if (typeof(pSolverExpression) !== 'string')
+			{
+				return pSolverExpression;
+			}
+			const tmpSolverContainer = [ pSolverExpression ];
+			rewriteSolverEntry(tmpSolverContainer, 0, pLogPrefix);
+			return tmpSolverContainer[0];
+		};
+
+		/**
+		 * Input templates render against the marshal destination, so the addresses they reference are ours.
+		 *
+		 * @param {any} pTemplate - The configured template.
+		 *
+		 * @return {any} The template, with local addresses nested into this injection.
+		 */
+		const rewriteTemplateAddresses = (pTemplate) =>
+		{
+			if (typeof(pTemplate) !== 'string')
+			{
+				return pTemplate;
+			}
+			const tmpMarshalDestination = this.viewMarshalDestination;
+			const tmpTemplateRoots = [ 'Record.Data.' ];
+			if (tmpMarshalDestination)
+			{
+				tmpTemplateRoots.push(`${tmpMarshalDestination}.`);
+			}
+			let tmpTemplate = pTemplate;
+			for (const tmpTemplateRoot of tmpTemplateRoots)
+			{
+				tmpTemplate = tmpTemplate.replace(new RegExp(`${escapeRegExp(tmpTemplateRoot)}([A-Za-z0-9_$.[\\]]+)`, 'g'),
+					(pMatch, pAddress) =>
+					{
+						const tmpTranslated = this.translateManifestReference(pAddress, tmpAddressTranslation, tmpHashTranslation, tmpPrefixAddressTranslation);
+						return (tmpTranslated === null) ? pMatch : `${tmpTemplateRoot}${tmpTranslated}`;
+					});
+			}
+			return tmpTemplate;
+		};
+
+		/**
+		 * Entity bundles gather server data into an address, filtered by a template; both can point at
+		 * something this manifest owns.
+		 *
+		 * @param {any} pEntitiesBundle - The configured entity bundle array.
+		 */
+		const rewriteEntitiesBundle = (pEntitiesBundle) =>
+		{
+			if (!Array.isArray(pEntitiesBundle))
+			{
+				return;
+			}
+			for (const tmpEntityBundle of pEntitiesBundle)
+			{
+				if (!tmpEntityBundle || (typeof(tmpEntityBundle) !== 'object'))
+				{
+					continue;
+				}
+				for (const tmpAddressProperty of INJECTION_ENTITY_BUNDLE_ADDRESS_PROPERTIES)
+				{
+					if (tmpEntityBundle[tmpAddressProperty])
+					{
+						tmpEntityBundle[tmpAddressProperty] = rewriteAbsoluteAddress(tmpEntityBundle[tmpAddressProperty]);
+					}
+				}
+				for (const tmpTemplateProperty of INJECTION_ENTITY_BUNDLE_TEMPLATE_PROPERTIES)
+				{
+					if (tmpEntityBundle[tmpTemplateProperty])
+					{
+						tmpEntityBundle[tmpTemplateProperty] = rewriteTemplateAddresses(tmpEntityBundle[tmpTemplateProperty]);
+					}
+				}
+			}
+		};
+
+		/**
+		 * @param {any} pTriggerGroup - A trigger group configuration.
+		 */
+		const rewriteTriggerGroup = (pTriggerGroup) =>
+		{
+			if (!pTriggerGroup || (typeof(pTriggerGroup) !== 'object'))
+			{
+				return;
+			}
+			for (const tmpTemplateProperty of INJECTION_INPUT_TEMPLATE_PROPERTIES)
+			{
+				if (pTriggerGroup[tmpTemplateProperty])
+				{
+					pTriggerGroup[tmpTemplateProperty] = rewriteTemplateAddresses(pTriggerGroup[tmpTemplateProperty]);
+				}
+			}
+			for (const tmpEntityBundleProperty of INJECTION_INPUT_ENTITY_BUNDLE_PROPERTIES)
+			{
+				rewriteEntitiesBundle(pTriggerGroup[tmpEntityBundleProperty]);
+			}
+			for (const tmpSolverProperty of INJECTION_TRIGGER_GROUP_SOLVER_PROPERTIES)
+			{
+				if (Array.isArray(pTriggerGroup[tmpSolverProperty]))
+				{
+					for (let i = 0; i < pTriggerGroup[tmpSolverProperty].length; i++)
+					{
+						rewriteSolverEntry(pTriggerGroup[tmpSolverProperty], i, `trigger group ${tmpSolverProperty} reference`);
+					}
+				}
+			}
+			if (pTriggerGroup.TriggerAddress)
+			{
+				pTriggerGroup.TriggerAddress = rewriteAbsoluteAddress(pTriggerGroup.TriggerAddress);
+			}
+			if (pTriggerGroup.MarshalOnComplete && (typeof(pTriggerGroup.MarshalOnComplete) === 'object'))
+			{
+				pTriggerGroup.MarshalOnComplete.Section = translateHashReference(pTriggerGroup.MarshalOnComplete.Section, tmpSectionTranslation);
+				pTriggerGroup.MarshalOnComplete.Input = translateHashReference(pTriggerGroup.MarshalOnComplete.Input, tmpHashTranslation);
+			}
+		};
+
+		/**
+		 * Trigger groups and entity bundles resolve against the section view and the application, so they name
+		 * things this manifest owns wherever the input carrying them lives.
+		 *
+		 * @param {any} pPictForm - The PictForm configuration of an input.
+		 */
+		const rewriteInputTriggerConfiguration = (pPictForm) =>
+		{
+			for (const tmpTriggerGroupProperty of INJECTION_INPUT_TRIGGER_GROUP_PROPERTIES)
+			{
+				const tmpTriggerGroupConfiguration = pPictForm[tmpTriggerGroupProperty];
+				if (Array.isArray(tmpTriggerGroupConfiguration))
+				{
+					for (const tmpTriggerGroup of tmpTriggerGroupConfiguration)
+					{
+						rewriteTriggerGroup(tmpTriggerGroup);
+					}
+				}
+				else if (tmpTriggerGroupConfiguration)
+				{
+					rewriteTriggerGroup(tmpTriggerGroupConfiguration);
+				}
+			}
+			for (const tmpEntityBundleProperty of INJECTION_INPUT_ENTITY_BUNDLE_PROPERTIES)
+			{
+				rewriteEntitiesBundle(pPictForm[tmpEntityBundleProperty]);
+			}
+		};
+
+		// A record set column can carry a trigger group of its own, and those solvers are run against the
+		// section view rather than against a record, so they name what this manifest owns. The column's hash
+		// and address are relative to a record of the set, so they stay as they are.
+		for (const tmpReferenceManifest of Object.values(tmpManifest.ReferenceManifests || {}))
+		{
+			for (const tmpColumnDescriptor of Object.values(tmpReferenceManifest.Descriptors || {}))
+			{
+				if (tmpColumnDescriptor.PictForm && (typeof(tmpColumnDescriptor.PictForm) === 'object'))
+				{
+					rewriteInputTriggerConfiguration(tmpColumnDescriptor.PictForm);
+				}
+			}
+		}
+
+		for (const tmpDescriptor of Object.values(tmpManifest.Descriptors || {}))
+		{
+			const tmpPictForm = tmpDescriptor.PictForm;
+			if (!tmpPictForm || (typeof(tmpPictForm) !== 'object'))
+			{
+				continue;
+			}
+			for (const tmpSectionHashProperty of INJECTION_INPUT_SECTION_HASH_PROPERTIES)
+			{
+				if (tmpPictForm[tmpSectionHashProperty])
+				{
+					tmpPictForm[tmpSectionHashProperty] = translateHashReference(tmpPictForm[tmpSectionHashProperty], tmpSectionTranslation);
+					// A tab selector stores the hash of the tab it is on, so its default is one too.
+					tmpDescriptor.Default = translateHashReference(tmpDescriptor.Default, tmpSectionTranslation);
+				}
+			}
+			for (const tmpGroupHashProperty of INJECTION_INPUT_GROUP_HASH_PROPERTIES)
+			{
+				if (tmpPictForm[tmpGroupHashProperty])
+				{
+					tmpPictForm[tmpGroupHashProperty] = translateHashReference(tmpPictForm[tmpGroupHashProperty], tmpGroupTranslation);
+					tmpDescriptor.Default = translateHashReference(tmpDescriptor.Default, tmpGroupTranslation);
+				}
+			}
+			for (const tmpSolverProperty of INJECTION_INPUT_SOLVER_PROPERTIES)
+			{
+				if (tmpPictForm[tmpSolverProperty])
+				{
+					tmpPictForm[tmpSolverProperty] = rewriteSolverValue(tmpPictForm[tmpSolverProperty], `input ${tmpSolverProperty} reference`);
+				}
+			}
+			for (const tmpSolverSetProperty of INJECTION_INPUT_SOLVER_SET_PROPERTIES)
+			{
+				if (Array.isArray(tmpPictForm[tmpSolverSetProperty.Property]))
+				{
+					for (const tmpSolverEntry of tmpPictForm[tmpSolverSetProperty.Property])
+					{
+						if (tmpSolverEntry && (typeof(tmpSolverEntry) === 'object') && tmpSolverEntry[tmpSolverSetProperty.SolverProperty])
+						{
+							tmpSolverEntry[tmpSolverSetProperty.SolverProperty] = rewriteSolverValue(tmpSolverEntry[tmpSolverSetProperty.SolverProperty], `input ${tmpSolverSetProperty.Property} reference`);
+						}
+					}
+				}
+			}
+			for (const tmpAddressProperty of INJECTION_INPUT_ADDRESS_PROPERTIES)
+			{
+				if (tmpPictForm[tmpAddressProperty])
+				{
+					tmpPictForm[tmpAddressProperty] = rewriteAbsoluteAddress(tmpPictForm[tmpAddressProperty]);
+				}
+			}
+			rewriteInputTriggerConfiguration(tmpPictForm);
+			for (const tmpTemplateProperty of INJECTION_INPUT_TEMPLATE_PROPERTIES)
+			{
+				if (tmpPictForm[tmpTemplateProperty])
+				{
+					tmpPictForm[tmpTemplateProperty] = rewriteTemplateAddresses(tmpPictForm[tmpTemplateProperty]);
 				}
 			}
 		}
@@ -1669,6 +2084,30 @@ class PictFormMetacontroller extends libPictViewClass
 }
 
 module.exports = PictFormMetacontroller;
+
+/**
+ * What createDistinctManifest translates when a manifest is injected, by kind. The injection conformance
+ * tests measure fixture coverage against this, so adding a construct here without a fixture case fails.
+ *
+ * @type {Record<string, any>}
+ */
+module.exports.InjectionTranslation = (
+{
+	"InputSectionHashProperties": INJECTION_INPUT_SECTION_HASH_PROPERTIES,
+	"InputGroupHashProperties": INJECTION_INPUT_GROUP_HASH_PROPERTIES,
+	"InputSolverProperties": INJECTION_INPUT_SOLVER_PROPERTIES,
+	"InputSolverSetProperties": INJECTION_INPUT_SOLVER_SET_PROPERTIES,
+	"InputAddressProperties": INJECTION_INPUT_ADDRESS_PROPERTIES,
+	"InputTriggerGroupProperties": INJECTION_INPUT_TRIGGER_GROUP_PROPERTIES,
+	"InputTemplateProperties": INJECTION_INPUT_TEMPLATE_PROPERTIES,
+	"InputEntityBundleProperties": INJECTION_INPUT_ENTITY_BUNDLE_PROPERTIES,
+	"EntityBundleAddressProperties": INJECTION_ENTITY_BUNDLE_ADDRESS_PROPERTIES,
+	"EntityBundleTemplateProperties": INJECTION_ENTITY_BUNDLE_TEMPLATE_PROPERTIES,
+	"TriggerGroupSolverProperties": INJECTION_TRIGGER_GROUP_SOLVER_PROPERTIES,
+	"ManifestConstructs": INJECTION_MANIFEST_CONSTRUCTS,
+	"SolverDirectiveCodes": Array.from(SOLVER_DIRECTIVE_CODES),
+});
+
 /** @type {Record<string, any>} */
 module.exports.default_configuration = (
 {

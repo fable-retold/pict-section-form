@@ -98,6 +98,22 @@ declare class DynamicTabularData extends libPictProvider {
      */
     deleteDynamicTableRow(pView: any, pGroupIndex: number, pRowIndex: number | string): boolean;
     /**
+     * Render every view in pViewsToRender while preserving pRecordSetAddress's data in
+     * the model. Re-rendering a table that contains entity-selector cells (Material /
+     * Organization / Product / etc.) destroys and recreates their select2 widgets; the
+     * transient empty widget gets read back into the model and wipes the selected value
+     * AND its resolved __Record for EVERY row -- the "selected Source / Name disappears
+     * after adding or deleting a row" data-loss bug. Because it clobbers the saved
+     * FormData, the value is then also missing from the exported PDF. A render() must be
+     * model-non-destructive, so snapshot the record set before rendering and restore any
+     * cleared fields afterward. No-op for plain (non-entity) tables, where render never
+     * changes the model (snapshot == post-render state, restore is a no-op).
+     *
+     * @param {string} pRecordSetAddress - RecordSetAddress of the table being re-rendered.
+     * @param {Array<Object>} pViewsToRender - Views bound to that record set to render.
+     */
+    _renderViewsPreservingRecordSet(pRecordSetAddress: string, pViewsToRender: Array<any>): void;
+    /**
      * Rebuild every OTHER section-form view whose DynamicColumns are sourced from
      * pSourceRecordSetAddress: re-resolve their generated columns and rebuild their
      * template + DOM. Call this in the RENDER phase (after a source row was added or
@@ -153,7 +169,7 @@ declare class DynamicTabularData extends libPictProvider {
      *
      * @param {Object} pGroup - The reordered group (its RecordSetAddress drives dependents).
      */
-    _repaintAfterRowReorder(pGroup: any): void;
+    _repaintAfterRowReorder(pView: any, pGroup: any): void;
 }
 declare namespace DynamicTabularData {
     export { _DefaultProviderConfiguration as default_configuration, ElementDescriptor };

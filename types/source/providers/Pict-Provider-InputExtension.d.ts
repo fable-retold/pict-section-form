@@ -98,6 +98,37 @@ declare class PictInputExtensionProvider extends libPictProvider {
      */
     onDataMarshalToFormTabular(pView: any, pGroup: any, pInput: any, pValue: any, pHTMLSelector: string, pRowIndex: number, pTransactionGUID: string): boolean;
     /**
+     * Repaint this input's rendered display from the model after a tabular row REORDER
+     * (move up/down/set-index), which preserves the row count but changes which row holds
+     * which value. A plain marshal updates simple inputs in place, but stateful widgets
+     * (e.g. an entity-selector's select2) will not switch to a value whose option isn't the
+     * one currently shown; those providers override this to force their display to the row's
+     * current value. Default is a no-op.
+     *
+     * @param {Object} pView - The view object.
+     * @param {Object} pGroup - The group definition object.
+     * @param {number} pRow - The row index.
+     * @param {Object} pInput - The input object.
+     * @param {any} pValue - The value to display.
+     * @param {string} pHTMLSelector - The HTML selector.
+     * @param {string} pTransactionGUID - The transaction GUID for the event dispatch.
+     * @returns {boolean} - Returns true.
+     */
+    onTabularRowReorderRepaint(pView: any, pGroup: any, pRow: number, pInput: any, pValue: any, pHTMLSelector: string, pTransactionGUID: string): boolean;
+    /**
+     * Tabular sibling of onTabularRowReorderRepaint. Default is a no-op.
+     *
+     * @param {Object} pView - The view object.
+     * @param {Object} pGroup - The group definition object.
+     * @param {Object} pInput - The input object.
+     * @param {any} pValue - The value to display.
+     * @param {string} pHTMLSelector - The HTML selector.
+     * @param {number} pRowIndex - The row index of the tabular data.
+     * @param {string} pTransactionGUID - The transaction GUID for the event dispatch.
+     * @returns {boolean} - Returns true.
+     */
+    onTabularRowReorderRepaintTabular(pView: any, pGroup: any, pInput: any, pValue: any, pHTMLSelector: string, pRowIndex: number, pTransactionGUID: string): boolean;
+    /**
      * Handles data requests for the Pict-Provider-InputExtension.
      *
      * @param {Object} pView - The view object.

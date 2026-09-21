@@ -36,11 +36,20 @@ declare class CustomInputHandler extends libPictSectionInputExtension {
      */
     getGroupSelector(pView: any, pGroupHash: string): string;
     /**
+     * Is this tab group hash actually one of the input's tabs?
+     *
+     * @param {Object} pInput - The input object.
+     * @param {string} pTabGroupHash - The tab group hash to test.
+     *
+     * @return {boolean}
+     */
+    isTabInSet(pInput: any, pTabGroupHash: string): boolean;
+    /**
      * @param {string} pViewHash
      * @param {string} pInputHash
      * @param {string} pTabHash
      *
-     * @return {boolean}
+     * @return {boolean} - true once the tab is shown; false (nothing changed) if the view, input or tab hash is not valid.
      */
     selectTabByViewHash(pViewHash: string, pInputHash: string, pTabHash: string): boolean;
     /**

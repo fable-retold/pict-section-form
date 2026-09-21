@@ -16,6 +16,53 @@ declare class CustomInputHandler extends libPictSectionInputExtension {
     defaultDataParsingConfiguration: any;
     currentChartObjects: {};
     currentChartDataObjects: {};
+    currentChartLegendState: {};
+    /**
+     * Classify a dataset's line style for its legend swatch, so a reading, a
+     * dashed control limit and an unconnected marker series are told apart at a
+     * glance. Chart.js's own legend draws every entry as the same block.
+     *
+     * @param {Object} pDataset - The Chart.js dataset.
+     * @return {string} A swatch modifier class.
+     */
+    _legendSwatchClass(pDataset: any): string;
+    /**
+     * Group the datasets for the legend. A dataset declares its group with
+     * `LegendGroup` on the solver entry (carried onto the dataset as
+     * `pictLegendGroup`); anything that does not is "Data". Group ORDER follows
+     * first appearance, so configuration controls it rather than sort order.
+     *
+     * @param {Object} pChart - The Chart.js instance.
+     * @return {Array<{Key: string, Items: Array<{Index: number, Dataset: Object}>}>}
+     */
+    _legendGroups(pChart: any): Array<{
+        Key: string;
+        Items: Array<{
+            Index: number;
+            Dataset: any;
+        }>;
+    }>;
+    /**
+     * Build (or rebuild) the grouped HTML legend beside a chart's canvas.
+     *
+     * The legend is created in the DOM rather than in the template because there
+     * are several chart templates (the base set plus per-theme copies) and a
+     * legend added to only some of them is the kind of divergence that goes
+     * unnoticed. Chart.js's built-in legend is switched off whenever this runs.
+     *
+     * @param {string} pRawHTMLID - The input's Macro.RawHTMLID.
+     * @param {Object} pChart - The Chart.js instance.
+     * @param {Object} pLegendConfiguration - The resolved ChartLegend config.
+     */
+    renderChartLegend(pRawHTMLID: string, pChart: any, pLegendConfiguration: any): boolean;
+    /**
+     * Resolve the ChartLegend configuration for an input. Returns null when the
+     * grouped legend is not in use, in which case Chart.js's own legend stands.
+     *
+     * @param {Object} pInput - The PictForm input object.
+     * @return {Object|null}
+     */
+    resolveChartLegendConfiguration(pInput: any): any | null;
     /**
      *
      * @param {Object} pInput - The PictForm input object

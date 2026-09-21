@@ -340,15 +340,74 @@ declare class TabularLayout extends libPictSectionGroupLayout {
      */
     _paintTabularColumnChooserOpenState(pView: any, pGroup: any, pOpen: boolean): void;
     /**
-     * Position the (fixed) chooser popover against its trigger button, flipping
-     * above when the room below is genuinely cramped — same approach as the
-     * recordset's column chooser, so no ancestor overflow can clip it.
+     * Anchor the (open) chooser popover to its trigger with the same listener-free strategy as
+     * pict-section-picker: keep it in the DOM and CSS-absolute under the (position:relative) bar --
+     * which rides page scroll for free -- UNLESS a clipping ancestor would cut it, in which case
+     * portal it to <body> and place it in document coords. No scroll/resize handlers: an absolute
+     * (not fixed) panel tracks the document as it scrolls, so one placement holds.
      *
      * @param {Object} pView
      * @param {Object} pGroup
      * @param {HTMLElement} pPopover
      */
-    _positionTabularColumnChooserPopover(pView: any, pGroup: any, pPopover: HTMLElement): void;
+    _applyTabularColumnChooserAnchor(pView: any, pGroup: any, pPopover: HTMLElement): void;
+    /**
+     * Move the popover to <body> and place it against the trigger in document coords (viewport rect +
+     * scroll), flipping above when the room below is genuinely cramped. Carries the resolved
+     * --theme-color-* tokens across so the panel stays themed off its scoped container.
+     *
+     * @param {HTMLElement} pPopover
+     * @param {HTMLElement} pTrigger
+     */
+    _portalTabularColumnChooserPopover(pPopover: HTMLElement, pTrigger: HTMLElement): void;
+    /**
+     * Re-home a portaled popover into its bar and drop everything the portal wrote. Doubles as the
+     * orphan sweeper: if a re-render already baked a fresh in-bar popover, the portaled one is stale
+     * and gets discarded rather than duplicated.
+     *
+     * @param {Object} pView
+     * @param {Object} pGroup
+     * @param {HTMLElement} pPopover
+     */
+    _restoreTabularColumnChooserPopover(pView: any, pGroup: any, pPopover: HTMLElement): void;
+    /**
+     * Remove any portaled copies of a chooser popover (matched by element id) that are direct children
+     * of <body>, except the one to keep. Iterates body children so no attribute-selector escaping of
+     * the id is needed, and is scoped by id so it never touches another table's portaled popover.
+     *
+     * @param {string} pElementId
+     * @param {HTMLElement} pKeep
+     */
+    _sweepPortaledColchooserOrphans(pElementId: string, pKeep: HTMLElement): void;
+    /**
+     * Portal when ANY clipping ancestor of the trigger would actually cut the popover -- an overflow
+     * ancestor alone isn't enough, but a roomy inner clipper doesn't excuse a tighter one further out.
+     *
+     * @param {HTMLElement} pTrigger
+     * @param {HTMLElement} pPopover
+     * @returns {boolean}
+     */
+    _tabularColumnChooserShouldPortal(pTrigger: HTMLElement, pPopover: HTMLElement): boolean;
+    /**
+     * Nearest ancestor (up to, not including, <body>) with an overflow clip on any axis, or null.
+     * Stops at <body> because the document's own scroll is what the absolute anchoring rides on.
+     *
+     * @param {HTMLElement} pElement
+     * @returns {HTMLElement|null}
+     */
+    _tabularColumnChooserClippingAncestor(pElement: HTMLElement): HTMLElement | null;
+    /**
+     * Would the clipper cut the popover if it opened in place? The CSS path opens downward, right-
+     * aligned to the trigger; project that worst-case box (trigger bottom + gap, up to the max height)
+     * and test whether any edge falls outside the clipper. 1px slack avoids a needless portal on a
+     * flush edge.
+     *
+     * @param {HTMLElement} pTrigger
+     * @param {HTMLElement} pClipper
+     * @param {number} pWidth
+     * @returns {boolean}
+     */
+    _tabularColumnChooserClipBites(pTrigger: HTMLElement, pClipper: HTMLElement, pWidth: number): boolean;
     /**
      * Rebuild + re-render a tabular view and re-marshal the form data into it.
      * Same tail as sortTabularColumn: the rebuild re-bakes the table template
@@ -407,6 +466,19 @@ declare class TabularLayout extends libPictSectionGroupLayout {
      * @returns {boolean}
      */
     resetTabularColumnVisibility(pViewHash: string, pGroupIndex: number | string): boolean;
+    /**
+     * After a mid-marshal DynamicColumns rebuild/re-render, the freshly painted table DOM
+     * is empty: the enclosing onMarshalToView already ran its marshalDataToForm BEFORE this
+     * hook re-rendered, so the dynamic cells lost the values that pass had just written and
+     * would only refill on the NEXT marshal -- the "% Passing table blanks on row add/delete
+     * or Source/Name select until another action brings it back" bug. Re-marshal the view's
+     * data into the new DOM here so the cells repopulate within the SAME cycle. This is safe
+     * to call from inside onDataMarshalToForm: marshalDataToForm only writes model values into
+     * the inputs and does NOT itself invoke onDataMarshalToForm, so it cannot recurse here.
+     *
+     * @param {Object} pView
+     */
+    _refillAfterDynamicColumnRebuild(pView: any): void;
 }
 import libPictSectionGroupLayout = require("../Pict-Provider-DynamicLayout.js");
 //# sourceMappingURL=Pict-Layout-Tabular.d.ts.map

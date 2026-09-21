@@ -89,15 +89,50 @@ declare class PictFormMetacontroller extends libPictViewClass {
         HashTranslation: Record<string, string>;
     };
     /**
+     * Translates a reference to something the manifest owns -- an exact hash or address, or a reference that
+     * only starts with one (`Rows.length`, `Rows[0].Line`, `Crate.Items.length`), where the longest address
+     * the reference starts with wins.
+     *
+     * @param {string} pReference - The reference to translate.
+     * @param {Record<string, string>} pPrimaryTranslation - Consulted first: hashes for symbols, addresses for address-shaped references.
+     * @param {Record<string, string>} pSecondaryTranslation - Consulted second.
+     * @param {Record<string, string>} [pPrefixTranslation] - Addresses that a partial reference may start with.
+     *
+     * @return {string|null} The translated reference, or null when the manifest does not own it.
+     */
+    translateManifestReference(pReference: string, pPrimaryTranslation: Record<string, string>, pSecondaryTranslation: Record<string, string>, pPrefixTranslation?: Record<string, string>): string | null;
+    /**
+     * Finds the SERIES / MAP / MULTIROWMAP / MONTECARLO directive in a tokenized solver expression, if there
+     * is one, and reads its header the way the expression parser does: which header positions hold an address
+     * to iterate over (everything else in a header, keyword or not, is not a reference to translate -- notably
+     * the per-row property a MULTIROWMAP variable reads), and which names the body sees as iteration variables
+     * rather than as addresses.
+     *
+     * @param {Array<string>} pTokens - The raw tokens of the expression.
+     *
+     * @return {{ Code: string, HeaderStart: number, HeaderEnd: number, TranslateIndices: Set<number>, Locals: Set<string> }|null} null when the expression has no directive.
+     */
+    parseSolverDirectiveScope(pTokens: Array<string>): {
+        Code: string;
+        HeaderStart: number;
+        HeaderEnd: number;
+        TranslateIndices: Set<number>;
+        Locals: Set<string>;
+    } | null;
+    /**
      * Rewrite a solver expression by tokenizing, replacing address/hash tokens, and recomposing.
      *
      * @param {string} pExpression - The solver expression string.
      * @param {Record<string, string>} pHashTranslation - A mapping of original hashes to new hashes for replacement.
      * @param {Record<string, string>} pAddressTranslation - A mapping of original addresses to new addresses for replacement.
+     * @param {{ PrefixAddressTranslation?: Record<string, string>, RowRelative?: boolean }} [pOptions] - PrefixAddressTranslation holds the addresses a partial reference may start with (defaults to pAddressTranslation); RowRelative marks an expression solved against a record of a record set rather than against the manifest.
      *
      * @return {string} The rewritten expression, or the original if no changes were made.
      */
-    rewriteSolverExpression(pExpression: string, pHashTranslation: Record<string, string>, pAddressTranslation: Record<string, string>): string;
+    rewriteSolverExpression(pExpression: string, pHashTranslation: Record<string, string>, pAddressTranslation: Record<string, string>, pOptions?: {
+        PrefixAddressTranslation?: Record<string, string>;
+        RowRelative?: boolean;
+    }): string;
     /**
      * Changes:
      *   * The hashes of each section+group to be globally unique.
@@ -271,9 +306,10 @@ declare class PictFormMetacontroller extends libPictViewClass {
     get isPictMetacontroller(): boolean;
 }
 declare namespace PictFormMetacontroller {
-    export { default_configuration, SortFunction, ManifestDescriptor };
+    export { InjectionTranslation, default_configuration, SortFunction, ManifestDescriptor };
 }
 import libPictViewClass = require("pict-view");
+declare const InjectionTranslation: Record<string, any>;
 declare const default_configuration: Record<string, any>;
 type SortFunction = (a: any, b: any) => number;
 type ManifestDescriptor = import("manyfest").ManifestDescriptor;

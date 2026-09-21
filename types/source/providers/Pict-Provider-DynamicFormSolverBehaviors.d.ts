@@ -15,6 +15,18 @@ declare class PictDynamicFormsSolverBehaviors extends libPictProvider {
     /** @type {string} */
     cssHideSectionClass: string;
     cssHideGroupClass: string;
+    /** @type {Record<string, boolean>} */
+    sectionVisibilityState: Record<string, boolean>;
+    /** @type {Record<string, boolean>} */
+    groupVisibilityState: Record<string, boolean>;
+    /** @type {Record<string, {Section: string, Method: string, Arguments: Array<any>}>} */
+    decorationState: Record<string, {
+        Section: string;
+        Method: string;
+        Arguments: Array<any>;
+    }>;
+    /** @type {boolean} */
+    decorationReplayInProgress: boolean;
     /** @type {string} */
     cssTabularRowHighlightClass: string;
     /** @type {string} */
@@ -102,6 +114,76 @@ declare class PictDynamicFormsSolverBehaviors extends libPictProvider {
     setGroupVisibility(pSectionHash: any, pGroupHash: any, pVisible: any): boolean;
     hideGroup(pSectionHash: any, pGroupHash: any): boolean;
     showGroup(pSectionHash: any, pGroupHash: any): boolean;
+    /**
+     * @param {string} pSectionHash
+     * @param {string} pGroupHash
+     *
+     * @return {string} - The groupVisibilityState key for a section/group pair.
+     */
+    getGroupVisibilityStateKey(pSectionHash: string, pGroupHash: string): string;
+    /**
+     * Re-apply a section's recorded visibility (and that of its groups) after a render regenerated its DOM.
+     *
+     * Every render path -- DynamicColumns rebuild, dependent-view rebuild, row add/delete/move, the
+     * group-scoped swap in renderGroupInPlace -- repaints those elements with only their manifest
+     * CSSClass, and solvers run BEFORE the marshal that triggers them, so nothing else puts the hide
+     * back. Called from the view's onAfterRender so one restore covers them all. A section with no
+     * recorded state is left as the template rendered it.
+     *
+     * @param {string} pSectionHash - The section that was just rendered.
+     *
+     * @return {void}
+     */
+    reapplySectionVisibility(pSectionHash: string): void;
+    /**
+     * Remember a DOM decoration a solver just applied so it can be replayed after a render.
+     *
+     * @param {string} pSectionHash - The section the decoration targets.
+     * @param {string} pKey - Stable identity for what is decorated; a repeat overwrites it.
+     * @param {string} pMethod - The method on this provider that applies it.
+     * @param {Array<any>} pArguments - The arguments to replay it with.
+     *
+     * @return {void}
+     */
+    recordDecoration(pSectionHash: string, pKey: string, pMethod: string, pArguments: Array<any>): void;
+    /**
+     * Replay every decoration recorded against a section after a render repainted its markup.
+     *
+     * Highlight classes and inline colors live on rows, cells and containers that the section
+     * template regenerates, exactly like the hide classes. Replay is idempotent: each entry is
+     * keyed by its target, and a recorded "remove" simply re-runs a removal against fresh markup.
+     *
+     * @param {string} pSectionHash - The section that was just rendered.
+     *
+     * @return {void}
+     */
+    reapplySectionDecorations(pSectionHash: string): void;
+    /**
+     * Restore everything a solver put on this section's DOM that a render just wiped -- visibility
+     * first, then decorations. This is what the section view calls from its own onAfterRender.
+     *
+     * @param {string} pSectionHash - The section that was just rendered.
+     *
+     * @return {void}
+     */
+    reapplySectionDOMState(pSectionHash: string): void;
+    /**
+     * Re-render a single group in place, leaving the rest of the section's DOM untouched.
+     *
+     * The section template is one string (wrap/section prefixes + every group's
+     * generateGroupLayoutTemplate + postfixes), so a normal render rebuilds all of it.
+     * This regenerates just the requested group's slice and swaps that one element.
+     *
+     * Init is then run the normal way (the view's own post-render pass) rather than being
+     * hand-scoped: input providers guard their own re-initialization (a select2 picker
+     * checks for an existing instance before creating one), so untouched groups no-op and
+     * only the freshly-rendered group actually initializes.
+     *
+     * @param {import('../views/Pict-View-DynamicForm.js')} pView - The section view.
+     * @param {string} pGroupHash - The group to re-render.
+     * @return {boolean} - True if the group was rendered in place; false to fall back to a full render.
+     */
+    renderGroupInPlace(pView: import("../views/Pict-View-DynamicForm.js"), pGroupHash: string): boolean;
     /**
      * Causes a tabular section to refresh its display
      *

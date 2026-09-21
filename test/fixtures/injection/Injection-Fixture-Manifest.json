@@ -1,0 +1,366 @@
+{
+	"HostManifest":
+	{
+		"Scope": "OrchardHost",
+		"Sections":
+		[
+			{
+				"Hash": "Overview",
+				"Name": "Overview",
+				"Groups": [ { "Hash": "OverviewGroup", "Name": "Overview" } ]
+			}
+		],
+		"Descriptors":
+		{
+			"HostRate":
+			{
+				"Name": "Host Rate",
+				"Hash": "HostRate",
+				"DataType": "Number",
+				"PictForm": { "Section": "Overview", "Group": "OverviewGroup", "Row": 1 }
+			},
+			"Width":
+			{
+				"Name": "Host Width",
+				"Hash": "Width",
+				"DataType": "Number",
+				"PictForm": { "Section": "Overview", "Group": "OverviewGroup", "Row": 1 }
+			}
+		},
+		"ReferenceManifests": {}
+	},
+
+	"InjectableManifest":
+	{
+		"Scope": "Crate",
+		"ValidationSolvers": [ "CheckedTotal = Area + Count" ],
+		"Sections":
+		[
+			{
+				"Hash": "Measure",
+				"Name": "Measure",
+				"Groups":
+				[
+					{ "Hash": "MeasureGroup", "Name": "Measurements" },
+					{
+						"Hash": "RowsGroup",
+						"Name": "Rows",
+						"Layout": "Tabular",
+						"RecordSetAddress": "Rows",
+						"RecordManifest": "CrateRow",
+						"RecordSetSolvers": [ "Line = Qty * Price" ]
+					},
+					{ "Hash": "ChartGroup", "Name": "Chart" }
+				],
+				"Solvers":
+				[
+					"Area = Width * Height",
+					{ "Expression": "AreaScaled = Area * HostRate", "Ordinal": 3 },
+					"RowCount = Rows.length",
+					{ "Expression": "FirstLine = Rows[0].Line", "Ordinal": 2 },
+					{ "Expression": "LineTotal = SUM(Rows[].Line)", "Ordinal": 2 },
+					{ "Expression": "SecondLine = {Rows[1].Line}", "Ordinal": 2 },
+					"SecondQty = GETVALUE(\"AppData.Orchard.Rows[1].Qty\")",
+					"WidthCopy = GETVALUE(\"AppData.Orchard.Width\")",
+					"ReadingCount = Readings.length",
+					"FirstReading = Readings[0]",
+					"ItemCount = Crate.Items.length",
+					"Volume = Area * Depth",
+					"QtyList = flatten(Rows[].Qty)",
+					{ "Expression": "Doubled = MAP VAR Qty FROM QtyList : Qty * 2", "Ordinal": 2 },
+					"Scaled = MAP VAR r FROM Rows : r.Qty * Width",
+					"Steps = SERIES FROM 1 TO RowCount : n * Width",
+					{ "Expression": "RowCarry = MULTIROWMAP ROWS FROM Rows VAR Qty FROM Qty OFFSET -1 DEFAULT 0 : Qty * 2", "Ordinal": 2 },
+					"WideLabel = IF(Width, \">\", 3.5, \"Width\", \"Narrow\")",
+					"HeightMaxPlus = HeightMax + Height",
+					"SetSectionVisibility(\"Extras\", ShowExtras)",
+					"Scratch = Width + 1",
+					{ "Expression": "FromScratch = Scratch * 2", "Ordinal": 2 }
+				]
+			},
+			{
+				"Hash": "Inputs",
+				"Name": "Inputs",
+				"Groups": [ { "Hash": "InputsGroup", "Name": "Every Input" } ]
+			},
+			{
+				"Hash": "Composed",
+				"Name": "Composed",
+				"Groups": [ { "Hash": "ComposedGroup", "Name": "Composed Inputs" } ]
+			},
+			{
+				"Hash": "TabOne",
+				"Name": "Tab One",
+				"Groups": [ { "Hash": "TabOneGroup", "Name": "Tab One" } ]
+			},
+			{
+				"Hash": "TabTwo",
+				"Name": "Tab Two",
+				"Groups": [ { "Hash": "TabTwoGroup", "Name": "Tab Two" } ]
+			},
+			{
+				"Hash": "Grouped",
+				"Name": "Grouped",
+				"Groups":
+				[
+					{ "Hash": "GroupPickerGroup", "Name": "Group Picker" },
+					{ "Hash": "GroupA", "Name": "Group A" },
+					{ "Hash": "GroupB", "Name": "Group B" }
+				]
+			},
+			{
+				"Hash": "Extras",
+				"Name": "Extras",
+				"Groups": [ { "Hash": "ExtrasGroup", "Name": "Extras" } ]
+			}
+		],
+		"Descriptors":
+		{
+			"Width": { "Name": "Width", "Hash": "Width", "DataType": "Number", "PictForm": { "Section": "Measure", "Group": "MeasureGroup", "Row": 1 } },
+			"Height": { "Name": "Height", "Hash": "Height", "DataType": "Number", "PictForm": { "Section": "Measure", "Group": "MeasureGroup", "Row": 1 } },
+			"HeightMax": { "Name": "Height Max", "Hash": "HeightMax", "DataType": "Number", "PictForm": { "Section": "Measure", "Group": "MeasureGroup", "Row": 1 } },
+			"Qty": { "Name": "Crate Quantity", "Hash": "Qty", "DataType": "Number", "PictForm": { "Section": "Measure", "Group": "MeasureGroup", "Row": 2 } },
+			"Dims.Depth": { "Name": "Depth", "Hash": "Depth", "DataType": "Number", "PictForm": { "Section": "Measure", "Group": "MeasureGroup", "Row": 2 } },
+			"ShowExtras": { "Name": "Show Extras", "Hash": "ShowExtras", "DataType": "Number", "PictForm": { "Section": "Measure", "Group": "MeasureGroup", "Row": 2 } },
+			"Readings": { "Name": "Readings", "Hash": "Readings", "DataType": "Array" },
+			"Crate": { "Name": "Crate", "Hash": "Crate", "DataType": "Object" },
+
+			"Area": { "Name": "Area", "Hash": "Area", "DataType": "Number" },
+			"AreaScaled": { "Name": "Area Scaled", "Hash": "AreaScaled", "DataType": "Number" },
+			"RowCount": { "Name": "Row Count", "Hash": "RowCount", "DataType": "Number" },
+			"FirstLine": { "Name": "First Line", "Hash": "FirstLine", "DataType": "Number" },
+			"LineTotal": { "Name": "Line Total", "Hash": "LineTotal", "DataType": "Number" },
+			"SecondLine": { "Name": "Second Line", "Hash": "SecondLine", "DataType": "Number" },
+			"SecondQty": { "Name": "Second Quantity", "Hash": "SecondQty", "DataType": "Number" },
+			"WidthCopy": { "Name": "Width Copy", "Hash": "WidthCopy", "DataType": "Number" },
+			"ReadingCount": { "Name": "Reading Count", "Hash": "ReadingCount", "DataType": "Number" },
+			"FirstReading": { "Name": "First Reading", "Hash": "FirstReading", "DataType": "Number" },
+			"ItemCount": { "Name": "Item Count", "Hash": "ItemCount", "DataType": "Number" },
+			"Volume": { "Name": "Volume", "Hash": "Volume", "DataType": "Number" },
+			"QtyList": { "Name": "Quantity List", "Hash": "QtyList", "DataType": "Array" },
+			"Doubled": { "Name": "Doubled", "Hash": "Doubled", "DataType": "Array" },
+			"Scaled": { "Name": "Scaled", "Hash": "Scaled", "DataType": "Array" },
+			"Steps": { "Name": "Steps", "Hash": "Steps", "DataType": "Array" },
+			"RowCarry": { "Name": "Row Carry", "Hash": "RowCarry", "DataType": "Array" },
+			"WideLabel": { "Name": "Wide Label", "Hash": "WideLabel", "DataType": "String" },
+			"HeightMaxPlus": { "Name": "Height Max Plus", "Hash": "HeightMaxPlus", "DataType": "Number" },
+			"FromScratch": { "Name": "From Scratch", "Hash": "FromScratch", "DataType": "Number" },
+			"CheckedTotal": { "Name": "Checked Total", "Hash": "CheckedTotal", "DataType": "Number" },
+
+			"Label": { "Name": "Label", "Hash": "Label", "DataType": "String", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 1 } },
+			"Count": { "Name": "Count", "Hash": "Count", "DataType": "Number", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 1 } },
+			"Precise": { "Name": "Precise", "Hash": "Precise", "DataType": "PreciseNumber", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 1 } },
+			"PreciseDisplay": { "Name": "Precise Display", "Hash": "PreciseDisplay", "DataType": "PreciseNumber", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 1, "InputType": "PreciseNumberReadOnly" } },
+			"NoteText": { "Name": "Note Text", "Hash": "NoteText", "DataType": "String", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 2, "InputType": "TextArea" } },
+			"Ready": { "Name": "Ready", "Hash": "Ready", "DataType": "Boolean", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 2, "InputType": "Boolean" } },
+			"Shade": { "Name": "Shade", "Hash": "Shade", "DataType": "String", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 2, "InputType": "Color" } },
+			"Reference": { "Name": "Reference", "Hash": "Reference", "DataType": "String", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 3, "InputType": "ReadOnly" } },
+			"Shown": { "Name": "Shown", "Hash": "Shown", "DataType": "String", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 3, "InputType": "DisplayOnly" } },
+			"Concealed": { "Name": "Concealed", "Hash": "Concealed", "DataType": "String", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 3, "InputType": "Hidden" } },
+			"Notes": { "Name": "Notes", "Hash": "Notes", "DataType": "String", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 4, "InputType": "Markdown" } },
+			"Blurb": { "Name": "Blurb", "Hash": "Blurb", "DataType": "String", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 4, "InputType": "HTML" } },
+			"Site": { "Name": "Site", "Hash": "Site", "DataType": "String", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 4, "InputType": "Link" } },
+			"Grade":
+			{
+				"Name": "Grade",
+				"Hash": "Grade",
+				"DataType": "String",
+				"PictForm":
+				{
+					"Section": "Inputs",
+					"Group": "InputsGroup",
+					"Row": 5,
+					"InputType": "Option",
+					"SelectOptions": [ { "id": "first", "text": "First" }, { "id": "second", "text": "Second" } ]
+				}
+			},
+			"Picked": { "Name": "Picked", "Hash": "Picked", "DataType": "DateTime", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 5 } },
+			"Story": { "Name": "Story", "Hash": "Story", "DataType": "String", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 6, "InputType": "RichText" } },
+			"Sketch": { "Name": "Sketch", "Hash": "Sketch", "DataType": "Object", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 6, "InputType": "Diagram" } },
+			"Payload": { "Name": "Payload", "Hash": "Payload", "DataType": "Object", "PictForm": { "Section": "Inputs", "Group": "InputsGroup", "Row": 6, "InputType": "ObjectEditor" } },
+
+			"Source":
+			{
+				"Name": "Source",
+				"Hash": "Source",
+				"DataType": "Number",
+				"PictForm":
+				{
+					"Section": "Composed",
+					"Group": "ComposedGroup",
+					"Row": 1,
+					"Providers": [ "Pict-Input-AutofillTriggerGroup" ],
+					"AutofillTriggerGroup":
+					[
+						{
+							"TriggerGroupHash": "CrateEcho",
+							"TriggerAllInputs": true,
+							"PreSolvers": [ "EchoStamp = Source + 0" ],
+							"PostSolvers": [ "Echo = Source * 10" ],
+							"MarshalOnComplete": { "Section": "Composed", "Input": "Echo" }
+						}
+					]
+				}
+			},
+			"Echo": { "Name": "Echo", "Hash": "Echo", "DataType": "Number", "PictForm": { "Section": "Composed", "Group": "ComposedGroup", "Row": 1 } },
+			"Mirror":
+			{
+				"Name": "Mirror",
+				"Hash": "Mirror",
+				"DataType": "Number",
+				"PictForm":
+				{
+					"Section": "Composed",
+					"Group": "ComposedGroup",
+					"Row": 1,
+					"Providers": [ "Pict-Input-AutofillTriggerGroup" ],
+					"AutofillTriggerGroup": [ { "TriggerGroupHash": "CrateEcho", "TriggerAddress": "AppData.Orchard.Source" } ]
+				}
+			},
+			"Summary":
+			{
+				"Name": "Summary",
+				"Hash": "Summary",
+				"DataType": "String",
+				"PictForm":
+				{
+					"Section": "Composed",
+					"Group": "ComposedGroup",
+					"Row": 2,
+					"InputType": "Templated",
+					"Template": "<span class=\"crate-summary\">{~D:Record.Data.Width~}x{~D:AppData.Orchard.Height~}</span>"
+				}
+			},
+			"Lookup":
+			{
+				"Name": "Lookup",
+				"Hash": "Lookup",
+				"DataType": "String",
+				"PictForm":
+				{
+					"Section": "Composed",
+					"Group": "ComposedGroup",
+					"Row": 2,
+					"InputType": "TemplatedEntityLookup",
+					"Providers": [ "Pict-Input-TemplatedEntityLookup" ],
+					"TemplatedEntityLookup":
+					{
+						"TriggerGroupHash": "CrateEcho",
+						"Template": "<span class=\"crate-lookup\">{~D:Record.Data.Label~}</span>",
+						"EntitiesBundle": [ { "Entity": "Crate", "Filter": "FBV~IDCrate~EQ~{~D:Record.Data.Count~}", "Destination": "AppData.Orchard.LookupTarget", "SingleRecord": true } ]
+					}
+				}
+			},
+			"LookupTarget": { "Name": "Lookup Target", "Hash": "LookupTarget", "DataType": "Object" },
+			"EchoStamp": { "Name": "Echo Stamp", "Hash": "EchoStamp", "DataType": "Number" },
+			"ChartOptions": { "Name": "Chart Options", "Hash": "ChartOptions", "DataType": "Object" },
+			"ChartLabelSource": { "Name": "Chart Label Source", "Hash": "ChartLabelSource", "DataType": "Array" },
+			"ChartDatasetSource": { "Name": "Chart Dataset Source", "Hash": "ChartDatasetSource", "DataType": "Array" },
+			"Bundled":
+			{
+				"Name": "Bundled",
+				"Hash": "Bundled",
+				"DataType": "String",
+				"PictForm":
+				{
+					"Section": "Composed",
+					"Group": "ComposedGroup",
+					"Row": 3,
+					"InputType": "Option",
+					"Providers": [ "Pict-Input-Select", "Pict-Input-EntityBundleRequest" ],
+					"SelectOptions": [ { "id": "one", "text": "One" } ],
+					"EntitiesBundle": [ { "Entity": "Crate", "Filter": "FBV~IDCrate~EQ~{~D:Record.Data.Count~}", "EntityFilterTemplate": "FBV~IDCrate~EQ~{~D:Record.Data.Qty~}", "Destination": "AppData.Orchard.BundleTarget", "SingleRecord": true } ],
+					"EntityBundleTriggerGroup": "CrateEcho"
+				}
+			},
+			"BundleTarget": { "Name": "Bundle Target", "Hash": "BundleTarget", "DataType": "Object" },
+			"TabPicker":
+			{
+				"Name": "Tab Picker",
+				"Hash": "TabPicker",
+				"DataType": "String",
+				"PictForm":
+				{
+					"Section": "Measure",
+					"Group": "MeasureGroup",
+					"Row": 5,
+					"InputType": "TabSectionSelector",
+					"TabSectionSet": [ "TabOne", "TabTwo" ],
+					"TabSectionNames": [ "One", "Two" ],
+					"DefaultTabSectionHash": "TabTwo"
+				}
+			},
+			"TabOneNote": { "Name": "Tab One Note", "Hash": "TabOneNote", "DataType": "String", "PictForm": { "Section": "TabOne", "Group": "TabOneGroup", "Row": 1 } },
+			"TabTwoNote": { "Name": "Tab Two Note", "Hash": "TabTwoNote", "DataType": "String", "PictForm": { "Section": "TabTwo", "Group": "TabTwoGroup", "Row": 1 } },
+			"GroupPicker":
+			{
+				"Name": "Group Picker",
+				"Hash": "GroupPicker",
+				"DataType": "String",
+				"PictForm":
+				{
+					"Section": "Grouped",
+					"Group": "GroupPickerGroup",
+					"Row": 1,
+					"InputType": "TabGroupSelector",
+					"TabGroupSet": [ "GroupA", "GroupB" ],
+					"TabGroupNames": [ "A", "B" ],
+					"DefaultTabGroupHash": "GroupB"
+				}
+			},
+			"GroupANote": { "Name": "Group A Note", "Hash": "GroupANote", "DataType": "String", "PictForm": { "Section": "Grouped", "Group": "GroupA", "Row": 1 } },
+			"GroupBNote": { "Name": "Group B Note", "Hash": "GroupBNote", "DataType": "String", "PictForm": { "Section": "Grouped", "Group": "GroupB", "Row": 1 } },
+			"ExtrasNote": { "Name": "Extras Note", "Hash": "ExtrasNote", "DataType": "String", "PictForm": { "Section": "Extras", "Group": "ExtrasGroup", "Row": 1 } },
+			"LineChart":
+			{
+				"Name": "Line Chart",
+				"Hash": "LineChart",
+				"DataType": "Object",
+				"PictForm":
+				{
+					"Section": "Measure",
+					"Group": "ChartGroup",
+					"Row": 1,
+					"InputType": "Chart",
+					"ChartType": "bar",
+					"ChartLabelsAddress": "AppData.Orchard.ChartLabelSource",
+					"ChartDatasetsAddress": "AppData.Orchard.ChartDatasetSource",
+					"ChartConfigCorePrototypeAddress": "AppData.Orchard.ChartOptions",
+					"ChartConfigCorePrototype": "GETVALUE(\"AppData.Orchard.ChartOptions\")",
+					"ChartLabelsSolver": "flatten(Rows[].Qty)",
+					"ChartDatasetsSolvers":
+					[
+						{ "Label": "Line", "DataSolver": "flatten(Rows[].Line)" },
+						{ "Label": "Scaled", "DataSolver": "flatten(Scaled)" }
+					]
+				}
+			}
+		},
+		"ReferenceManifests":
+		{
+			"CrateRow":
+			{
+				"Scope": "CrateRow",
+				"Descriptors":
+				{
+					"Qty": { "Name": "Quantity", "Hash": "Qty", "DataType": "Number", "PictForm": { "Section": "Measure", "Group": "RowsGroup" } },
+					"Price": { "Name": "Price", "Hash": "Price", "DataType": "Number", "PictForm": { "Section": "Measure", "Group": "RowsGroup" } },
+					"Line": { "Name": "Line", "Hash": "Line", "DataType": "Number", "PictForm": { "Section": "Measure", "Group": "RowsGroup" } },
+					"Tally":
+					{
+						"Name": "Tally",
+						"Hash": "Tally",
+						"DataType": "Number",
+						"PictForm":
+						{
+							"Section": "Measure",
+							"Group": "RowsGroup",
+							"Providers": [ "Pict-Input-TabularTriggerGroup" ],
+							"AutofillTriggerGroup": [ { "TriggerGroupHash": "CrateRowTally", "TriggerAllInputs": true, "PostSolvers": [ "TallyTotal = SUM(Rows[].Tally)" ] } ]
+						}
+					}
+				}
+			}
+		}
+	}
+}
