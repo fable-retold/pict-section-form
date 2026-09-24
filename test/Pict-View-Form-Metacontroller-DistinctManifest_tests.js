@@ -345,6 +345,35 @@ suite('PictFormMetacontroller distinct manifests', () =>
 		});
 	});
 
+	suite('buildManifestTranslations', () =>
+	{
+		test('translates one salted copy', () =>
+		{
+			const tmpMetacontroller = buildMetacontroller(MARSHAL_DESTINATION);
+			const tmpSalted = tmpMetacontroller.createDistinctManifest(_EdgeCaseManifests.InjectableManifest, 'alpha');
+			const { HashTranslation, AddressTranslation } = tmpMetacontroller.buildManifestTranslations(tmpSalted);
+			Expect(HashTranslation.Width).to.equal('Width_alpha');
+			Expect(AddressTranslation.Width).to.equal('alpha.Width');
+		});
+
+		test('warns when handed a manifest holding more than one copy, rather than collapsing silently', () =>
+		{
+			const tmpMetacontroller = buildMetacontroller(MARSHAL_DESTINATION);
+			const tmpFirst = tmpMetacontroller.createDistinctManifest(_EdgeCaseManifests.InjectableManifest, 'alpha');
+			const tmpSecond = tmpMetacontroller.createDistinctManifest(_EdgeCaseManifests.InjectableManifest, 'beta');
+			const tmpMerged = { Sections: tmpFirst.Sections.concat(tmpSecond.Sections), Descriptors: Object.assign({}, tmpFirst.Descriptors, tmpSecond.Descriptors) };
+			const tmpWarnings = [];
+			tmpMetacontroller.pict.log.warn = (pMessage) =>
+			{
+				tmpWarnings.push(pMessage);
+			};
+			const { HashTranslation } = tmpMetacontroller.buildManifestTranslations(tmpMerged);
+			Expect(tmpWarnings.length, 'a merged manifest cannot say what a name became').to.equal(1);
+			Expect(tmpWarnings[0]).to.contain('more than one injected copy');
+			Expect(HashTranslation.Width).to.equal('Width_beta');
+		});
+	});
+
 	suite('mergeValidationSolvers', () =>
 	{
 		test('appends the validation solvers of each salted copy after the form\'s own, in order', () =>

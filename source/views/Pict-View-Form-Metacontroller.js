@@ -332,32 +332,53 @@ class PictFormMetacontroller extends libPictViewClass
 	{
 		/** @type {Record<string, string>} */
 		const tmpAddressTranslation = {};
+		/** @type {Record<string, string>} */
+		const tmpHashTranslation = {};
+		/** @type {Array<string>} */
+		const tmpCollisions = [];
+		/**
+		 * @param {Record<string, string>} pTranslation - The map being filled.
+		 * @param {string} pOriginal - What the reference was called before the copy was salted.
+		 * @param {string} pTranslated - What it is called in this copy.
+		 */
+		const addTranslation = (pTranslation, pOriginal, pTranslated) =>
+		{
+			if ((pOriginal in pTranslation) && (pTranslation[pOriginal] !== pTranslated))
+			{
+				tmpCollisions.push(`${pOriginal} -> ${pTranslation[pOriginal]} | ${pTranslated}`);
+			}
+			pTranslation[pOriginal] = pTranslated;
+		};
 		for (const tmpSection of pManifest.Sections || [])
 		{
 			if (tmpSection.OriginalHash)
 			{
-				tmpAddressTranslation[tmpSection.OriginalHash] = tmpSection.Hash;
+				addTranslation(tmpAddressTranslation, tmpSection.OriginalHash, tmpSection.Hash);
 			}
 			for (const tmpGroup of tmpSection.Groups || [])
 			{
 				if (tmpGroup.OriginalHash)
 				{
-					tmpAddressTranslation[tmpGroup.OriginalHash] = tmpGroup.Hash;
+					addTranslation(tmpAddressTranslation, tmpGroup.OriginalHash, tmpGroup.Hash);
 				}
 			}
 		}
-		/** @type {Record<string, string>} */
-		const tmpHashTranslation = {};
 		for (const tmpDescriptor of Object.values(pManifest?.Descriptors || {}))
 		{
 			if (tmpDescriptor.OriginalDataAddress)
 			{
-				tmpAddressTranslation[tmpDescriptor.OriginalDataAddress] = tmpDescriptor.DataAddress;
+				addTranslation(tmpAddressTranslation, tmpDescriptor.OriginalDataAddress, tmpDescriptor.DataAddress);
 			}
 			if (tmpDescriptor.OriginalHash)
 			{
-				tmpHashTranslation[tmpDescriptor.OriginalHash] = tmpDescriptor.Hash;
+				addTranslation(tmpHashTranslation, tmpDescriptor.OriginalHash, tmpDescriptor.Hash);
 			}
+		}
+		if (tmpCollisions.length > 0)
+		{
+			// More than one copy of the same manifest is in here, so no single map can say what a name became.
+			// Build the translation from each copy as it is salted instead of from the form they were merged into.
+			this.pict.log.warn(`PictFormMetacontroller.buildManifestTranslations: ${tmpCollisions.length} reference(s) translate to more than one destination, so the last one wins. This manifest holds more than one injected copy.`, { Collisions: tmpCollisions.slice(0, 10) });
 		}
 		return { AddressTranslation: tmpAddressTranslation, HashTranslation: tmpHashTranslation };
 	}

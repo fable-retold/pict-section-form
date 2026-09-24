@@ -298,6 +298,7 @@ function runDifferential(pOptions)
 					Scenario: 'Differential',
 					Phase: tmpPhase,
 					Manifest: pOptions.Manifest,
+					Manifests: pOptions.Manifests,
 					HostManifest: pOptions.HostManifest,
 					MarshalDestination: pOptions.MarshalDestination,
 					InitialAppData: pOptions.InitialAppData,
@@ -311,6 +312,62 @@ function runDifferential(pOptions)
 	}
 	tmpChecks = tmpChecks.concat(compareDifferential(tmpPhases, tmpSalts, pOptions.IgnoreRootKeys));
 	return { Checks: tmpChecks, Phases: tmpPhases, Info: tmpPhases['pair'].Info || {} };
+}
+
+/**
+ * Runs a manifest live and then again from nothing but the data the live run saved, and compares.
+ *
+ * @param {Object} pOptions - see runDifferential; the same manifest, host, salts and fill drive both phases.
+ *
+ * @return {{ Checks: Array<Record<string, any>>, Phases: Record<string, any>, Info: Record<string, any> }}
+ */
+function runReconstitution(pOptions)
+{
+	const tmpSalts = pOptions.Salts || [ 'alpha', 'beta' ];
+	const tmpBaseConfig =
+	{
+		Scenario: 'Reconstitution',
+		Manifest: pOptions.Manifest,
+		Manifests: pOptions.Manifests,
+		HostManifest: pOptions.HostManifest,
+		MarshalDestination: pOptions.MarshalDestination,
+		InitialAppData: pOptions.InitialAppData,
+		Salts: tmpSalts,
+		Fill: pOptions.Fill,
+		DeclareUndeclaredSolverTargets: Boolean(pOptions.DeclareUndeclaredSolverTargets),
+	};
+	const tmpLive = runPage(Object.assign({}, pOptions, { Label: `${pOptions.Label || 'reconstitution'}-live`, Config: Object.assign({}, tmpBaseConfig, { Phase: 'live' }) }));
+	let tmpChecks = tmpLive.Checks.map((pCheck) => Object.assign({}, pCheck, { Label: `live: ${pCheck.Label}` }));
+	const tmpSavedData = tmpLive.Snapshots ? tmpLive.Snapshots.SavedData : null;
+	if (!tmpSavedData)
+	{
+		tmpChecks.push({ Label: 'the live phase produced data to save', Passed: false, Severity: 'fail', Detail: [ 'no SavedData snapshot; the live phase did not complete' ] });
+		return { Checks: tmpChecks, Phases: { live: tmpLive }, Info: tmpLive.Info || {} };
+	}
+	const tmpRest = runPage(Object.assign({}, pOptions, { Label: `${pOptions.Label || 'reconstitution'}-rest`, Config: Object.assign({}, tmpBaseConfig, { Phase: 'rest', SavedData: tmpSavedData }) }));
+	tmpChecks = tmpChecks.concat(tmpRest.Checks.map((pCheck) => Object.assign({}, pCheck, { Label: `rest: ${pCheck.Label}` })));
+
+	const tmpLiveSnapshot = tmpLive.Snapshots.Reconstitution;
+	const tmpRestSnapshot = tmpRest.Snapshots ? tmpRest.Snapshots.Reconstitution : null;
+	const addCheck = (pLabel, pDifferences) =>
+	{
+		tmpChecks.push({ Label: pLabel, Passed: pDifferences.length === 0, Severity: 'fail', Detail: pDifferences.slice(0, 12) });
+	};
+	if (!tmpRestSnapshot)
+	{
+		addCheck('the form rebuilt from its saved data', [ 'no Reconstitution snapshot; the rest phase did not complete' ]);
+		return { Checks: tmpChecks, Phases: { live: tmpLive, rest: tmpRest }, Info: tmpLive.Info || {} };
+	}
+	for (const tmpSalt of tmpSalts)
+	{
+		const tmpLiveCopy = tmpLiveSnapshot.Copies[tmpSalt] || {};
+		const tmpRestCopy = tmpRestSnapshot.Copies[tmpSalt] || {};
+		addCheck(`copy ${tmpSalt}: data read back from the saved form matches the form that was filled in`, deepDifferences(tmpLiveCopy.Data, tmpRestCopy.Data));
+		addCheck(`copy ${tmpSalt}: section and group visibility survives the round trip`, deepDifferences(tmpLiveCopy.Hidden, tmpRestCopy.Hidden));
+		addCheck(`copy ${tmpSalt}: chart data survives the round trip`, deepDifferences(tmpLiveCopy.Charts, tmpRestCopy.Charts));
+		addCheck(`copy ${tmpSalt}: every input displays what it displayed before the round trip`, deepDifferences(tmpLiveCopy.Displayed, tmpRestCopy.Displayed));
+	}
+	return { Checks: tmpChecks, Phases: { live: tmpLive, rest: tmpRest }, Info: tmpLive.Info || {} };
 }
 
 /**
@@ -404,11 +461,25 @@ function main()
 		});
 	tmpTally(printResults('a copy alone against a copy next to a sibling (any manifest, no expected values)', tmpDifferential, { Verbose: tmpVerbose }));
 
+	const tmpReconstitution = runReconstitution(
+		{
+			Manifest: tmpFixture.InjectableManifest,
+			HostManifest: tmpFixture.HostManifest,
+			MarshalDestination: tmpCases.MARSHAL_DESTINATION,
+			InitialAppData: { Orchard: { HostRate: 3 } },
+			Salts: tmpCases.SALTS,
+			Fill: { Seed: 7, RowCount: 3 },
+			DeclareUndeclaredSolverTargets: true,
+			Label: 'reconstitution',
+			WorkDirectory: tmpWorkDirectory,
+		});
+	tmpTally(printResults('a filled-in form against the same form rebuilt from the data it saved', tmpReconstitution, { Verbose: tmpVerbose }));
+
 	console.log(`\n${tmpPassed} passing, ${tmpFailures} failing, ${tmpOpen} open check(s)`);
 	return (tmpFailures > 0) ? 1 : 0;
 }
 
-module.exports = { buildBundle, findChrome, runPage, runDifferential, compareDifferential, deepDifferences, printResults };
+module.exports = { buildBundle, findChrome, runPage, runDifferential, runReconstitution, compareDifferential, deepDifferences, printResults };
 
 if (require.main === module)
 {

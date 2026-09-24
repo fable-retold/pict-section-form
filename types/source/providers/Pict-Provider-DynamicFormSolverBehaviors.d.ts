@@ -33,6 +33,10 @@ declare class PictDynamicFormsSolverBehaviors extends libPictProvider {
     cssTabularColumnHighlightClass: string;
     cssSnippet: string;
     solverOrdinalMap: {};
+    /** @type {Record<string, Record<string, boolean>>} */
+    scopedSolverOrdinalMap: Record<string, Record<string, boolean>>;
+    /** @type {string} */
+    activeSolverScope: string;
     setCSSSnippets(pCSSHideClass: any, pCSSSnippet: any): void;
     cssHideClass: any;
     addSolverFunction(pExpressionParser: any, pFunctionName: any, pFunctionAddress: any, pFunctionComment: any, pAddressParameterIndices: any): void;
@@ -70,6 +74,28 @@ declare class PictDynamicFormsSolverBehaviors extends libPictProvider {
      */
     sortArray(pArray: any[]): any[];
     /**
+     * The copy a view belongs to: the salt createDistinctManifest appended to its section hash, or an empty
+     * string for a section the form declares itself.
+     *
+     * @param {any} pView - A dynamic form view.
+     *
+     * @return {string} The scope gates set while solving that view are recorded against.
+     */
+    getViewSolverScope(pView: any): string;
+    /**
+     * Records which copy's solvers are running, so a gate one of them sets lands on that copy.
+     *
+     * @param {string} pScope - A scope from getViewSolverScope.
+     *
+     * @return {string} The scope that was active before, to restore afterwards.
+     */
+    setActiveSolverScope(pScope: string): string;
+    /**
+     * @param {number|string} pSolverOrdinal
+     * @param {boolean} pEnabled
+     */
+    writeSolverOrdinalGate(pSolverOrdinal: number | string, pEnabled: boolean): void;
+    /**
      * @param {number|string} pSolverOrdinal
      * @param {boolean|string|number} pEnabled
      */
@@ -84,10 +110,11 @@ declare class PictDynamicFormsSolverBehaviors extends libPictProvider {
     disableSolverOrdinal(pSolverOrdinal: number | string): void;
     /**
      * @param {number|string} pSolveOrdinal
+     * @param {string} [pScope] - The copy being solved; without one only the form's own gates apply.
      *
      * @return {boolean}
      */
-    checkSolverOrdinalEnabled(pSolveOrdinal: number | string): boolean;
+    checkSolverOrdinalEnabled(pSolveOrdinal: number | string, pScope?: string): boolean;
     getSectionSelector(pSectionFormID: any): string;
     setSectionVisibility(pSectionHash: any, pVisible: any): boolean;
     /**

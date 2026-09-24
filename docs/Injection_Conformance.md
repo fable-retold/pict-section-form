@@ -16,18 +16,31 @@ unsalted root, so a copy that reads or writes the wrong place is visible immedia
 | File | `test/PictSectionForm-Injection-Conformance_tests.js` | `test/browser/` |
 | Runs with | `npm test` (always) | `npm run test:injection` |
 | Needs | nothing beyond the test dependencies | a chrome-family browser (`CHROME_BIN` overrides) |
-| Asserts | fixture coverage, that a salted copy names nothing of its own by its unsalted name, and a data round trip through the view API: data in, solve, read back, write through the view, re-render | what needs a painted page: charts, tab switching, solver-driven visibility, templated rendering, trigger groups driven by real change events, and the unsalted root after all of it |
+| Asserts | fixture coverage, that a salted copy names nothing of its own by its unsalted name, and a data round trip through the view API: data in, solve, read back, write through the view, re-render | what needs a painted page: charts, tab switching, solver-driven visibility, templated rendering, trigger groups driven by real change events, the unsalted root after all of it, and that a form rebuilt from its saved data matches the one that was filled in |
 
 `browser-env` gives the data tier a DOM object model but does not paint: views render, macros and selectors
 are built, but no input elements land in the document. That is why the always-on tier round trips through the
 view data API (`setDataByInput`, `marshalToView`, `render`) and the browser tier owns everything that needs
 real elements and real events.
 
-The browser tier runs two scenarios. The edge case scenario injects the fixture twice with two salts that
+The browser tier runs three scenarios. The edge case scenario injects the fixture twice with two salts that
 share a prefix (`alpha`, `alphabeta`) and asserts what each copy should hold. The differential scenario needs
 no expected values and works for any manifest: it loads the same manifest as a pair of copies, then each copy
 alone, and compares -- a copy that reads or writes outside its own subtree computes differently next to a
-sibling than it does alone.
+sibling than it does alone. The reconstitution scenario answers a different question: it fills the copies in,
+publishes the data a host would save, then boots a second page from nothing but that saved data and injects
+the same copies again, the way reopening a saved form does. The two runs have to agree on every copy's data,
+on what is hidden, on chart contents and on what each input displays; a disagreement means a saved form reads
+back differently from the one that was filled in.
+
+Both scenarios take either one `Manifest` for every salt, or a `Manifests` array carrying a different manifest
+per salt -- so a form holding several different injected manifests is exercised the same way as one holding
+two copies of a single manifest. Manifests that share input names (as sibling manifests generated from one
+template usually do) are the interesting case, because that is where a copy can reach into its neighbour.
+
+Both are also libraries: `require()` the runner and call `runDifferential` / `runReconstitution` with any
+manifest, which is how a host application runs its own manifests through the same checks without those
+manifests having to live here.
 
 ## Adding a case
 

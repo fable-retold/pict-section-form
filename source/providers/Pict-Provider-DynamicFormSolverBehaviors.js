@@ -70,6 +70,13 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 			+ ' td.pict-tabular-column-highlight, th.pict-tabular-column-highlight { background-color: var(--pict-tabular-highlight-color, #FFF3CD) !important; }';
 
 		this.solverOrdinalMap = {};
+		// An injected copy gating an ordinal must not gate the same ordinal in a sibling copy, so a gate set
+		// while solving a copy is recorded against that copy. A gate set by the form itself stays global,
+		// which is what a form that gates its own ordinals has always relied on.
+		/** @type {Record<string, Record<string, boolean>>} */
+		this.scopedSolverOrdinalMap = {};
+		/** @type {string} */
+		this.activeSolverScope = '';
 
 		this.setCSSSnippets();
 	}
@@ -287,12 +294,63 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 	}
 
 	/**
+	 * The copy a view belongs to: the salt createDistinctManifest appended to its section hash, or an empty
+	 * string for a section the form declares itself.
+	 *
+	 * @param {any} pView - A dynamic form view.
+	 *
+	 * @return {string} The scope gates set while solving that view are recorded against.
+	 */
+	getViewSolverScope(pView)
+	{
+		const tmpSection = pView ? pView.sectionDefinition : undefined;
+		if (!tmpSection || !tmpSection.OriginalHash || !tmpSection.Hash || (tmpSection.Hash === tmpSection.OriginalHash))
+		{
+			return '';
+		}
+		return tmpSection.Hash.substring(tmpSection.OriginalHash.length + 1);
+	}
+
+	/**
+	 * Records which copy's solvers are running, so a gate one of them sets lands on that copy.
+	 *
+	 * @param {string} pScope - A scope from getViewSolverScope.
+	 *
+	 * @return {string} The scope that was active before, to restore afterwards.
+	 */
+	setActiveSolverScope(pScope)
+	{
+		const tmpPreviousScope = this.activeSolverScope;
+		this.activeSolverScope = pScope || '';
+		return tmpPreviousScope;
+	}
+
+	/**
+	 * @param {number|string} pSolverOrdinal
+	 * @param {boolean} pEnabled
+	 */
+	writeSolverOrdinalGate(pSolverOrdinal, pEnabled)
+	{
+		const tmpOrdinalKey = `ORD-${pSolverOrdinal}`;
+		if (!this.activeSolverScope)
+		{
+			this.solverOrdinalMap[tmpOrdinalKey] = pEnabled;
+			return;
+		}
+		if (!this.scopedSolverOrdinalMap[this.activeSolverScope])
+		{
+			this.scopedSolverOrdinalMap[this.activeSolverScope] = {};
+		}
+		this.scopedSolverOrdinalMap[this.activeSolverScope][tmpOrdinalKey] = pEnabled;
+	}
+
+	/**
 	 * @param {number|string} pSolverOrdinal
 	 * @param {boolean|string|number} pEnabled
 	 */
 	setSolverOrdinalEnabled(pSolverOrdinal, pEnabled)
 	{
-		this.solverOrdinalMap[`ORD-${pSolverOrdinal}`] = pEnabled == true || pEnabled == '1';
+		this.writeSolverOrdinalGate(pSolverOrdinal, pEnabled == true || pEnabled == '1');
 	}
 
 	/**
@@ -300,7 +358,7 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 	 */
 	enableSolverOrdinal(pSolverOrdinal)
 	{
-		this.solverOrdinalMap[`ORD-${pSolverOrdinal}`] = true;
+		this.writeSolverOrdinalGate(pSolverOrdinal, true);
 	}
 
 	/**
@@ -308,18 +366,28 @@ class PictDynamicFormsSolverBehaviors extends libPictProvider
 	 */
 	disableSolverOrdinal(pSolverOrdinal)
 	{
-		this.solverOrdinalMap[`ORD-${pSolverOrdinal}`] = false;
+		this.writeSolverOrdinalGate(pSolverOrdinal, false);
 	}
 
 	/**
 	 * @param {number|string} pSolveOrdinal
+	 * @param {string} [pScope] - The copy being solved; without one only the form's own gates apply.
 	 *
 	 * @return {boolean}
 	 */
-	checkSolverOrdinalEnabled(pSolveOrdinal)
+	checkSolverOrdinalEnabled(pSolveOrdinal, pScope)
 	{
 		let tmpOrdinalKey = `ORD-${pSolveOrdinal}`;
-		return (!(tmpOrdinalKey in this.solverOrdinalMap)) || (this.solverOrdinalMap[tmpOrdinalKey] === true);
+		if ((tmpOrdinalKey in this.solverOrdinalMap) && (this.solverOrdinalMap[tmpOrdinalKey] !== true))
+		{
+			return false;
+		}
+		const tmpScopedGates = pScope ? this.scopedSolverOrdinalMap[pScope] : undefined;
+		if (tmpScopedGates && (tmpOrdinalKey in tmpScopedGates) && (tmpScopedGates[tmpOrdinalKey] !== true))
+		{
+			return false;
+		}
+		return true;
 	}
 
 	getSectionSelector(pSectionFormID)

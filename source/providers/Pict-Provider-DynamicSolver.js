@@ -307,10 +307,13 @@ class PictDynamicSolver extends libPictProvider
 				this.log.trace(`DynamicSolver [${this.UUID}]::[${this.Hash}] [${pReason}] Solving ordinal ${tmpOrdinalKeys[i]}`);
 			}
 			let tmpOrdinalContainer = tmpOrdinalsToSolve[tmpOrdinalKeys[i]];
-			let tmpExecuteOrdinal = this.pict.providers.DynamicFormSolverBehaviors.checkSolverOrdinalEnabled(tmpOrdinalKeys[i]);
+			const tmpAdhocScope = this.pict.providers.DynamicFormSolverBehaviors.getViewSolverScope(pView);
+			let tmpExecuteOrdinal = this.pict.providers.DynamicFormSolverBehaviors.checkSolverOrdinalEnabled(tmpOrdinalKeys[i], tmpAdhocScope);
 			if (tmpExecuteOrdinal)
 			{
+				const tmpPreviousScope = this.pict.providers.DynamicFormSolverBehaviors.setActiveSolverScope(tmpAdhocScope);
 				this.executeAdhocSolvers(pView, tmpOrdinalContainer.AdhocSolvers, pReason, Number(tmpOrdinalKeys[i]), tmpSolveOutcome.SolverResultsMap);
+				this.pict.providers.DynamicFormSolverBehaviors.setActiveSolverScope(tmpPreviousScope);
 			}
 		}
 
@@ -399,6 +402,12 @@ class PictDynamicSolver extends libPictProvider
 			{
 				continue;
 			}
+			const tmpGroupScope = this.pict.providers.DynamicFormSolverBehaviors.getViewSolverScope(tmpView);
+			if (tmpGroupScope && !this.pict.providers.DynamicFormSolverBehaviors.checkSolverOrdinalEnabled(tmpSolver.Ordinal, tmpGroupScope))
+			{
+				continue;
+			}
+			this.pict.providers.DynamicFormSolverBehaviors.setActiveSolverScope(tmpGroupScope);
 
 			if (pPreventSolverCycles && tmpSolver.Expression.match(this._RunSolversRegex))
 			{
@@ -449,6 +458,7 @@ class PictDynamicSolver extends libPictProvider
 			tmpSolverReultsMap.ExecutedSolvers.push(tmpSolver);
 			tmpSolver.EndTimeStamp = Date.now();
 		}
+		this.pict.providers.DynamicFormSolverBehaviors.setActiveSolverScope('');
 	}
 
 	/**
@@ -472,6 +482,13 @@ class PictDynamicSolver extends libPictProvider
 			{
 				continue;
 			}
+			// A gate an injected copy set applies to that copy's solvers, not to a sibling's at the same ordinal.
+			const tmpSectionScope = this.pict.providers.DynamicFormSolverBehaviors.getViewSolverScope(tmpView);
+			if (tmpSectionScope && !this.pict.providers.DynamicFormSolverBehaviors.checkSolverOrdinalEnabled(tmpSolver.Ordinal, tmpSectionScope))
+			{
+				continue;
+			}
+			this.pict.providers.DynamicFormSolverBehaviors.setActiveSolverScope(tmpSectionScope);
 
 			if (pPreventSolverCycles && tmpSolver.Expression.match(this._RunSolversRegex))
 			{
@@ -499,6 +516,7 @@ class PictDynamicSolver extends libPictProvider
 			tmpSolverReultsMap.ExecutedSolvers.push(tmpSolver);
 			tmpSolver.EndTimeStamp = +new Date();
 		}
+		this.pict.providers.DynamicFormSolverBehaviors.setActiveSolverScope('');
 	}
 
 	/**

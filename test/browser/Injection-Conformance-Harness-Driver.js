@@ -504,6 +504,7 @@ const _Scenarios =
 	EdgeCase: require('./Injection-Conformance-EdgeCase-Scenario.js'),
 	Differential: require('./Injection-Conformance-Differential-Scenario.js'),
 	Standalone: require('./Injection-Conformance-Standalone-Scenario.js'),
+	Reconstitution: require('./Injection-Conformance-Reconstitution-Scenario.js'),
 };
 
 /**

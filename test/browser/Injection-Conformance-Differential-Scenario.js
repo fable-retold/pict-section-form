@@ -262,19 +262,42 @@ async function run(pContext)
 	await pContext.boot({ HostManifest: tmpConfig.HostManifest, MarshalDestination: tmpConfig.MarshalDestination, InitialAppData: tmpConfig.InitialAppData });
 
 	const tmpParser = pContext.pict.instantiateServiceProviderIfNotExists('ExpressionParser');
-	let tmpManifest = tmpConfig.Manifest;
-	const tmpUndeclared = findUndeclaredSolverTargets(tmpParser, tmpManifest);
-	pContext.info.UndeclaredSolverTargets = tmpUndeclared;
-	if (tmpConfig.DeclareUndeclaredSolverTargets)
+	// Each salt can carry a manifest of its own, so two different manifests can be injected side by side the
+	// way a host form holds several; one manifest for every salt is the same-manifest case.
+	const tmpManifests = {};
+	const tmpFills = {};
+	const tmpUndeclaredBySalt = {};
+	for (let i = 0; i < tmpConfig.Salts.length; i++)
 	{
-		tmpManifest = cloneData(tmpManifest);
-		for (const tmpTarget of tmpUndeclared)
+		const tmpSalt = tmpConfig.Salts[i];
+		let tmpSaltManifest = Array.isArray(tmpConfig.Manifests) ? tmpConfig.Manifests[i] : tmpConfig.Manifest;
+		const tmpUndeclaredForSalt = findUndeclaredSolverTargets(tmpParser, tmpSaltManifest);
+		tmpUndeclaredBySalt[tmpSalt] = tmpUndeclaredForSalt;
+		if (tmpConfig.DeclareUndeclaredSolverTargets)
 		{
-			tmpManifest.Descriptors[tmpTarget] = { Name: tmpTarget, Hash: tmpTarget, DataAddress: tmpTarget };
+			tmpSaltManifest = cloneData(tmpSaltManifest);
+			for (const tmpTarget of tmpUndeclaredForSalt)
+			{
+				tmpSaltManifest.Descriptors[tmpTarget] = { Name: tmpTarget, Hash: tmpTarget, DataAddress: tmpTarget };
+			}
+		}
+		tmpManifests[tmpSalt] = tmpSaltManifest;
+		tmpFills[tmpSalt] = buildFill(tmpSaltManifest, tmpConfig.Fill || {});
+	}
+	const tmpManifest = tmpManifests[tmpConfig.Salts[0]];
+	const tmpUndeclared = [];
+	for (const tmpSaltTargets of Object.values(tmpUndeclaredBySalt))
+	{
+		for (const tmpTarget of tmpSaltTargets)
+		{
+			if (!tmpUndeclared.includes(tmpTarget))
+			{
+				tmpUndeclared.push(tmpTarget);
+			}
 		}
 	}
-
-	const tmpFill = buildFill(tmpManifest, tmpConfig.Fill || {});
+	pContext.info.UndeclaredSolverTargets = tmpUndeclared;
+	const tmpFill = tmpFills[tmpSaltA];
 	pContext.info.FilledAddresses = Object.keys(tmpFill).length;
 	const tmpInjections = { 'host': [], 'pair': [ tmpSaltA, tmpSaltB ], 'solo-a': [ tmpSaltA ], 'solo-b': [ tmpSaltB ] }[tmpConfig.Phase];
 	if (!tmpInjections)
@@ -294,7 +317,7 @@ async function run(pContext)
 				pContext.pict.manifest.setValueAtAddress(tmpMarshal[tmpSalt], tmpAddress, cloneData(tmpValue));
 			}
 		}
-		const tmpInjection = await pContext.inject(tmpManifest, tmpSalt);
+		const tmpInjection = await pContext.inject(tmpManifests[tmpSalt], tmpSalt);
 		tmpCopies[tmpSalt] = tmpInjection.Salted;
 		if (tmpConfig.Phase === 'pair')
 		{
@@ -315,7 +338,7 @@ async function run(pContext)
 	const tmpSnapshot = { Root: tmpRoot, Copies: {} };
 	for (const tmpSalt of tmpInjections)
 	{
-		tmpSnapshot.Copies[tmpSalt] = snapshotCopy(pContext, tmpManifest, tmpCopies[tmpSalt], tmpSalt);
+		tmpSnapshot.Copies[tmpSalt] = snapshotCopy(pContext, tmpManifests[tmpSalt], tmpCopies[tmpSalt], tmpSalt);
 	}
 	pContext.snapshots.Differential = tmpSnapshot;
 }
