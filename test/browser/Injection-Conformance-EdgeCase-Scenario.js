@@ -135,6 +135,7 @@ async function run(pContext)
 
 	// A trigger group, driven by a real change event in one copy only
 	const tmpSiblingEchoBefore = pContext.getValue(`${tmpSecondSalt}.Echo`);
+	const tmpSiblingMirrorBefore = pContext.getValue(`${tmpSecondSalt}.Mirror`);
 	pContext.check(`${tmpFirstSalt}: typed Source into its own input`, pContext.enterValue(`Source_${tmpFirstSalt}`, 6));
 	await pContext.wait(100);
 	pContext.checkEqual(`${tmpFirstSalt}: its trigger group PostSolvers write Echo inside its own copy`, pContext.getValue(`${tmpFirstSalt}.Echo`), 60);
@@ -143,10 +144,11 @@ async function run(pContext)
 	const tmpEchoElement = pContext.getInputElement(`Echo_${tmpFirstSalt}`);
 	pContext.checkEqual(`${tmpFirstSalt}: MarshalOnComplete re-marshals its own section`, tmpEchoElement ? tmpEchoElement.value : null, 60);
 	const tmpSiblingMirror = pContext.getValue(`${tmpSecondSalt}.Mirror`);
-	pContext.check(`${tmpSecondSalt}: Mirror is only ever autofilled from its own Source`, (tmpSiblingMirror == null) || (tmpSiblingMirror === '') || (Number(tmpSiblingMirror) === 2), { Actual: tmpSiblingMirror });
+	pContext.check(`${tmpSecondSalt}: Mirror is only ever autofilled from its own Source`, (tmpSiblingMirror == null) || (tmpSiblingMirror === '') || (Number(tmpSiblingMirror) === Number(tmpSiblingMirrorBefore)) || (Number(tmpSiblingMirror) === 2), { Actual: tmpSiblingMirror, Before: tmpSiblingMirrorBefore });
 	const tmpSiblingEcho = pContext.getValue(`${tmpSecondSalt}.Echo`);
-	pContext.check(`${tmpSecondSalt}: Echo is only ever computed from its own Source`, (tmpSiblingEcho == null) || (tmpSiblingEcho === '') || (Number(tmpSiblingEcho) === 20), { Actual: tmpSiblingEcho });
-	pContext.check(`${tmpSecondSalt}: its trigger group does not run when the other copy changes`, String(tmpSiblingEcho) === String(tmpSiblingEchoBefore), _Cases.KNOWN_OPEN.SharedTriggerGroupHash, 'open');
+	pContext.check(`${tmpSecondSalt}: Echo is only ever computed from its own Source`, (tmpSiblingEcho == null) || (tmpSiblingEcho === '') || (Number(tmpSiblingEcho) === Number(tmpSiblingEchoBefore)) || (Number(tmpSiblingEcho) === 20), { Actual: tmpSiblingEcho, Before: tmpSiblingEchoBefore });
+	// The trigger group hash carries the copy's salt, so a change in one copy cannot run the other's group.
+	pContext.check(`${tmpSecondSalt}: its trigger group does not run when the other copy changes`, String(tmpSiblingEcho) === String(tmpSiblingEchoBefore), { Actual: tmpSiblingEcho, Before: tmpSiblingEchoBefore });
 
 	// The unsalted root
 	const tmpRootAfter = rootWithoutCopies(tmpMarshalDestinationObject);

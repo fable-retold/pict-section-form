@@ -440,7 +440,8 @@ suite('PictSectionForm injection conformance', () =>
 			const tmpSalted = tmpMetacontroller.createDistinctManifest(_Fixture.InjectableManifest, 'alpha');
 			const tmpColumn = tmpSalted.ReferenceManifests.CrateRow.Descriptors.Tally;
 			Expect(tmpColumn.Hash, 'a record set column is relative to a record, so its hash is untouched').to.equal('Tally');
-			Expect(tmpColumn.PictForm.AutofillTriggerGroup[0].PostSolvers[0], 'a column trigger group solver runs against the section view').to.contain('alpha.Rows[].Tally');
+			Expect(tmpColumn.PictForm.TabularTriggerGroup[0].PostSolvers[0], 'a column trigger group solver runs against the section view').to.contain('alpha.Rows[].Tally');
+			Expect(tmpColumn.PictForm.TabularTriggerGroup[0].TriggerGroupHash, 'a column trigger group is salted with the rest of the copy').to.equal('CrateRowTally_alpha');
 		});
 
 		test('every input of the fixture is reachable by its salted hash', () =>

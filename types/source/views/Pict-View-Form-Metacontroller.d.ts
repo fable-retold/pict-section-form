@@ -17,6 +17,8 @@ declare class PictFormMetacontroller extends libPictViewClass {
     manifest: any;
     AutoSolveOnFirstRender: boolean;
     FirstRenderCompleted: boolean;
+    injectionTriggerGroupProperties: string[];
+    injectionTriggerGroupHashProperties: string[];
     comprehensionDestinationAddress: any;
     SupportViewPrototypes: {
         LifecycleVisualization: typeof import("./support/Pict-View-PSF-LifeCycle-Visualization.js");
@@ -119,6 +121,19 @@ declare class PictFormMetacontroller extends libPictViewClass {
         TranslateIndices: Set<number>;
         Locals: Set<string>;
     } | null;
+    /**
+     * Collects every trigger group an injected manifest declares and maps it onto a salted hash, so a change
+     * in one copy does not run the matching trigger group in another copy of the same manifest.
+     *
+     * A manifest that means to hear the form it is injected into lists those hashes in `SharedTriggerGroups`
+     * at its root; those are left alone.
+     *
+     * @param {Record<string, any>} pManifest - The manifest being copied.
+     * @param {string} pUUID - The salt appended to each hash.
+     *
+     * @return {Record<string, string>} Original trigger group hash to salted hash.
+     */
+    buildTriggerGroupTranslation(pManifest: Record<string, any>, pUUID: string): Record<string, string>;
     /**
      * Rewrite a solver expression by tokenizing, replacing address/hash tokens, and recomposing.
      *

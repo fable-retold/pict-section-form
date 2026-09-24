@@ -94,9 +94,29 @@ the cases file and both tiers print them rather than failing on them:
 * **Undeclared solver targets.** A solver can assign to a name no descriptor declares, and the expression
   parser assigns an expression that has no assignment of its own to `Result`. Neither is nested into the copy,
   so copies share them.
-* **Shared trigger group hashes.** A trigger group hash is not salted, so a change in one copy also runs the
-  matching trigger group in the other. Each copy still reads and writes only its own data; a trigger group is
-  allowed to span a host form and what is injected into it.
+
+## Trigger groups
+
+A trigger group hash is salted with the rest of the copy, so a change in one copy runs only that copy's
+trigger groups. Every carrier is salted together -- a group configuration (`AutofillTriggerGroup`,
+`TemplatedEntityLookup`, `TabularTriggerGroup`) and a bare hash (`TriggerGroupHash`,
+`EntityBundleTriggerGroup`) -- because both sides of a trigger read the hash from their own configuration, so
+salting one side and not the other leaves the group silently dead.
+
+A manifest that means to hear the form it is injected into lists those hashes in `SharedTriggerGroups` at its
+root, and they are left unsalted:
+
+```json
+{ "Scope": "Crate", "SharedTriggerGroups": [ "HostCrateChange" ], "Sections": [] }
+```
+
+A host with input providers of its own carries its trigger group hashes in properties this library knows
+nothing about. It adds them to the carrier lists on the metacontroller, before anything is injected:
+
+```javascript
+pict.views.PictFormMetacontroller.injectionTriggerGroupProperties.push('MyGroupConfiguration');
+pict.views.PictFormMetacontroller.injectionTriggerGroupHashProperties.push('MyTriggerGroupHash');
+```
 
 Not declared in `KNOWN_OPEN`, because neither tier exercises it: the library has no way to remove an injected
 copy. Injection appends the copy's sections, descriptors and (translated, de-duplicated) `ValidationSolvers`

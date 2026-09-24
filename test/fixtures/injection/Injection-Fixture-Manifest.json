@@ -356,7 +356,7 @@
 							"Section": "Measure",
 							"Group": "RowsGroup",
 							"Providers": [ "Pict-Input-TabularTriggerGroup" ],
-							"AutofillTriggerGroup": [ { "TriggerGroupHash": "CrateRowTally", "TriggerAllInputs": true, "PostSolvers": [ "TallyTotal = SUM(Rows[].Tally)" ] } ]
+							"TabularTriggerGroup": [ { "TriggerGroupHash": "CrateRowTally", "TriggerAllInputs": true, "PostSolvers": [ "TallyTotal = SUM(Rows[].Tally)" ] } ]
 						}
 					}
 				}

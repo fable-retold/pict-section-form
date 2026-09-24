@@ -280,7 +280,7 @@ suite('PictFormMetacontroller distinct manifests', () =>
 			Expect(tokensOf(Metacontroller, tmpTriggerGroup.PostSolvers[0])).to.deep.equal(tokensOf(Metacontroller, `Echo_${SALT} = Source_${SALT} * 10`));
 			Expect(tmpTriggerGroup.MarshalOnComplete.Section).to.equal(`Composed_${SALT}`);
 			Expect(tmpTriggerGroup.MarshalOnComplete.Input).to.equal(`Echo_${SALT}`);
-			Expect(tmpTriggerGroup.TriggerGroupHash).to.equal('CrateEcho');
+			Expect(tmpTriggerGroup.TriggerGroupHash).to.equal(`CrateEcho_${SALT}`);
 			const tmpMirror = descriptorByOriginalHash(Salted, 'Mirror');
 			Expect(tmpMirror.PictForm.AutofillTriggerGroup[0].TriggerAddress).to.equal(`AppData.Orchard.${SALT}.Source`);
 		});
@@ -308,6 +308,27 @@ suite('PictFormMetacontroller distinct manifests', () =>
 			Expect(tokensOf(Metacontroller, tmpSolvers[0])).to.deep.equal(tokensOf(Metacontroller, `Area_${SALT} = Width_${SALT} * Height_${SALT}`));
 			Expect(tmpSolvers[1].Ordinal).to.equal(3);
 			Expect(tokensOf(Metacontroller, tmpSolvers[1].Expression)).to.deep.equal(tokensOf(Metacontroller, `AreaScaled_${SALT} = Area_${SALT} * HostRate`));
+		});
+
+		test('salts every trigger group hash the manifest declares, in each carrier', () =>
+		{
+			const { Salted } = saltEdgeCaseManifest();
+			Expect(descriptorByOriginalHash(Salted, 'Source').PictForm.AutofillTriggerGroup[0].TriggerGroupHash).to.equal(`CrateEcho_${SALT}`);
+			Expect(descriptorByOriginalHash(Salted, 'Mirror').PictForm.AutofillTriggerGroup[0].TriggerGroupHash).to.equal(`CrateEcho_${SALT}`);
+			Expect(descriptorByOriginalHash(Salted, 'Lookup').PictForm.TemplatedEntityLookup.TriggerGroupHash).to.equal(`CrateEcho_${SALT}`);
+			Expect(descriptorByOriginalHash(Salted, 'Bundled').PictForm.EntityBundleTriggerGroup).to.equal(`CrateEcho_${SALT}`);
+			Expect(Salted.ReferenceManifests.CrateRow.Descriptors.Tally.PictForm.TabularTriggerGroup[0].TriggerGroupHash).to.equal(`CrateRowTally_${SALT}`);
+		});
+
+		test('leaves a trigger group the manifest declares shared alone, salting the rest', () =>
+		{
+			const tmpMetacontroller = buildMetacontroller(MARSHAL_DESTINATION);
+			const tmpManifest = JSON.parse(JSON.stringify(_EdgeCaseManifests.InjectableManifest));
+			tmpManifest.SharedTriggerGroups = [ 'CrateEcho' ];
+			const tmpSalted = tmpMetacontroller.createDistinctManifest(tmpManifest, SALT);
+			Expect(descriptorByOriginalHash(tmpSalted, 'Source').PictForm.AutofillTriggerGroup[0].TriggerGroupHash).to.equal('CrateEcho');
+			Expect(descriptorByOriginalHash(tmpSalted, 'Bundled').PictForm.EntityBundleTriggerGroup).to.equal('CrateEcho');
+			Expect(tmpSalted.ReferenceManifests.CrateRow.Descriptors.Tally.PictForm.TabularTriggerGroup[0].TriggerGroupHash).to.equal(`CrateRowTally_${SALT}`);
 		});
 
 		test('two salts of the same manifest share no addresses or hashes', () =>

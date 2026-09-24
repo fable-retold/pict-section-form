@@ -171,7 +171,7 @@ const LABEL_PROPERTIES =
 [
 	'Name', 'Description', 'Label', 'Hint', 'Placeholder', 'CSSClass', 'CSSClasses', 'Scope', 'DataType', 'InputType',
 	'TabSectionNames', 'TabGroupNames', 'Layout', 'Row', 'Width', 'InputExtra', 'ChartType', 'Entity', 'Providers',
-	'TriggerGroupHash', 'EntityBundleTriggerGroup', 'RecordManifest', 'SelectOptions', 'OriginalHash', 'OriginalDataAddress',
+	'RecordManifest', 'SelectOptions', 'OriginalHash', 'OriginalDataAddress',
 ];
 
 // What the fixture demonstrates rather than asserts, because it is a property of injection itself rather
@@ -179,7 +179,6 @@ const LABEL_PROPERTIES =
 const KNOWN_OPEN =
 {
 	UndeclaredSolverTargets: 'a solver can assign to a name no descriptor declares (Scratch), and the expression parser assigns an expression with no assignment of its own to Result; neither is nested into the copy, so the copies share them',
-	SharedTriggerGroupHash: 'a trigger group hash is not salted, so a change in one copy also runs the matching trigger group in the other; each copy still reads and writes only its own data',
 };
 
 // Keys an injected copy leaves at the unsalted root that are not copy data.
