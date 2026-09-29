@@ -358,6 +358,21 @@
 							"Providers": [ "Pict-Input-TabularTriggerGroup" ],
 							"TabularTriggerGroup": [ { "TriggerGroupHash": "CrateRowTally", "TriggerAllInputs": true, "PostSolvers": [ "TallyTotal = SUM(Rows[].Tally)" ] } ]
 						}
+					},
+					"Bin":
+					{
+						"Name": "Bin",
+						"Hash": "Bin",
+						"DataType": "String",
+						"PictForm":
+						{
+							"Section": "Measure",
+							"Group": "RowsGroup",
+							"InputType": "Option",
+							"SelectOptions": [ { "id": "near", "text": "Near" }, { "id": "far", "text": "Far" } ],
+							"Providers": [ "Pict-Input-FacetFilter" ],
+							"ListFilterRules": [ { "FilterType": "Facet", "JoinListAddress": "AppData.BinCatalog", "JoinListAddressGlobal": true, "JoinListValueAddress": "Bin" } ]
+						}
 					}
 				}
 			}

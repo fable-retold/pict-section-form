@@ -51,6 +51,12 @@ a product re-renders every table whose columns are generated from it; the hide
 class lives on an element that render regenerates, so it used to be dropped.
 Single file, all configuration.
 
+### Facet Filter
+
+Order lines picking Genre -> Author -> Book from one shared catalog, each dropdown narrowed by the others in
+its row and kept consistent on change (Facet list-filter rules + the FacetFilter provider). Ships a small REST
+server so the catalog loads over HTTP: `npm run build && npm start`. See README-FacetFilter.md.
+
 ## Advanced
 
 ### Postcard

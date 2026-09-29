@@ -120,6 +120,7 @@ const INPUT_CASES =
 	{ Registry: 'Provider:Pict-Input-AutofillTriggerGroup', Hash: 'Source', Tier: 'browser', Marshals: true, Accepts: true, Value: 6, Note: 'the trigger fires on a real change event' },
 	{ Registry: 'Provider:Pict-Input-EntityBundleRequest', Hash: 'Bundled', Tier: 'expression', Marshals: false, Accepts: false, Note: 'gathers its bundle from a server; only its salted configuration is asserted' },
 	{ Registry: 'Provider:Pict-Input-TabularTriggerGroup', Hash: 'Tally', Tier: 'expression', Marshals: false, Accepts: false, Note: 'a record set column; its trigger group configuration is asserted on the salted manifest' },
+	{ Registry: 'Provider:Pict-Input-FacetFilter', Hash: 'Bin', Tier: 'expression', Marshals: false, Accepts: false, Note: 'a record set column; its siblings are found by row, so only its Facet rule is asserted on the salted manifest' },
 ];
 
 // Registry entries with no fixture case, and why. Anything else missing fails the coverage suite.

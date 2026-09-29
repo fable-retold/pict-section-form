@@ -207,6 +207,10 @@ Manages dynamic list definitions for select inputs.
 - Provides dynamic list generation
 - Manages list refresh
 
+**PickList keys:** `Hash`, `ListAddress`, `ListSourceAddress` (read from the form data, or from application
+state with `ListSourceAddressGlobal: true`), `IDTemplate`, `TextTemplate`, `Unique`, `Sorted`, and
+`SkipEmpty` (skip records whose id or text renders empty without logging them).
+
 **Key Methods:**
 
 ```javascript
@@ -222,20 +226,20 @@ pict.providers.MetaLists.setList('StatusCodes', [
 
 ### ListDistilling
 
-Filters lists based on rules and conditions.
+Filters a select input's options by the `ListFilterRules` on its descriptor.
 
 **Hash:** `ListDistilling`
 
-**Responsibilities:**
-- Applies filter rules to lists
-- Manages dependent list relationships
-- Handles cascading list updates
+**Rule types:** `Explicit` (compare each option to one value), `CrossMap` (keep options a join list maps to
+another value), `Facet` (options drawn from a shared record list, narrowed by the other inputs of the same
+row -- see [FacetFilter](input_providers/016-facet-filter.md)), or the hash of a provider with its own
+`filterList`.
 
 **Key Methods:**
 
 ```javascript
-// Distill a list based on rules
-const filtered = pict.providers.ListDistilling.distillList(sourceList, rules, context);
+// Filter a list of { id, text } options for an input; pass the row index for a tabular input.
+const filtered = pict.providers.ListDistilling.filterList(view, input, options, rowIndex);
 ```
 
 ### DataBroker
@@ -293,6 +297,7 @@ Input extension providers handle specific input types. They all extend
 | `Pict-Input-EntityBundleRequest` | EntityBundleRequest | Entity loading |
 | `Pict-Input-AutofillTriggerGroup` | AutofillTriggerGroup | Auto-fill |
 | `Pict-Input-TemplatedEntityLookup` | TemplatedEntityLookup | Entity lookup |
+| `Pict-Input-FacetFilter` | (any select) | Keeps facet dropdowns consistent on change |
 
 ## Creating Custom Providers
 

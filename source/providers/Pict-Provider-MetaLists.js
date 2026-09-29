@@ -191,8 +191,17 @@ class PictMetalist extends libPictProvider
 			return false;
 		}
 
-		// Now try to fetch the list data
-		let tmpListData = this.pict.providers.DataBroker.getValueByHash(pListObject.ListSourceAddress);
+		// Now try to fetch the list data; a global source reads application state rather than the form data.
+		let tmpListData;
+		if (pListObject.ListSourceAddressGlobal)
+		{
+			const tmpAddressSpace = { Fable: this.pict, Pict: this.pict, AppData: this.pict.AppData, Bundle: this.pict.Bundle };
+			tmpListData = this.pict.manifest.getValueAtAddress(tmpAddressSpace, pListObject.ListSourceAddress);
+		}
+		else
+		{
+			tmpListData = this.pict.providers.DataBroker.getValueByHash(pListObject.ListSourceAddress);
+		}
 		if (!tmpListData)
 		{
 			//this.log.warn(`Dynamic MetaList Provider [${this.UUID}]::[${this.Hash}] failed to fetch the list data for PickList [${pListObject.Hash}]. Skipping.`);
@@ -215,6 +224,11 @@ class PictMetalist extends libPictProvider
 
 					if (!tmpTextString || !tmpIDString)
 					{
+						// A list over an optional field (SkipEmpty) expects records without it.
+						if (pListObject.SkipEmpty)
+						{
+							continue;
+						}
 						this.log.error(`Dynamic MetaList Provider [${this.UUID}]::[${this.Hash}] failed to generate the Text or ID for PickList [${pListObject.Hash}]. Skipping.`);
 //						this.log.error(`Dynamic MetaList Provider [${this.UUID}]::[${this.Hash}] failed to generate the Text or ID for PickList [${pListObject.Hash}]. Skipping.`, {"Text": tmpTextString, "ID": tmpIDString, "Entry": tmpListEntry});
 						continue;

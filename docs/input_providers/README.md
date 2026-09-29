@@ -22,6 +22,7 @@ behavior for different data types and interaction patterns.
 | 013 | [TabSectionSelector](013-tab-section-selector.md) | TabSectionSelector | Tab navigation for sections |
 | 014 | [RichText](014-rich-text.md) | RichText | Markdown editor (edit) + rendered markdown (view); pluggable image uploader |
 | 015 | [Diagram](015-diagram.md) | Diagram | Excalidraw (edit) + inline themed SVG (view); themeify on save |
+| 016 | [FacetFilter](016-facet-filter.md) | (any select) | Dropdowns over one shared record list, each narrowed by the others (row-scoped in tables) |
 
 ## Provider Categories
 

@@ -138,10 +138,12 @@ class PictFormMetacontroller extends libPictViewClass
 
 	gatherInitialBundle(fCallback)
 	{
-		if (this.manifestDescription && this.manifestDescription.InitialBundle)
+		// Runs before bootstrap has set manifestDescription, so fall back to the manifest bootstrap will use.
+		const tmpManifestDescription = this.manifestDescription || this.fable.settings.DefaultFormManifest;
+		if (tmpManifestDescription && Array.isArray(tmpManifestDescription.InitialBundle))
 		{
-			this.log.info(`Gathering initial bundle for ${this.manifestDescription.InitialBundle.length} entities.`);
-			return this.pict.EntityProvider.gatherDataFromServer(this.manifestDescription.InitialBundle, (pError) =>
+			this.log.info(`Gathering initial bundle for ${tmpManifestDescription.InitialBundle.length} entities.`);
+			return this.pict.EntityProvider.gatherDataFromServer(tmpManifestDescription.InitialBundle, (pError) =>
 			{
 				// in case of an empty array, or all tasks being synchronous, wait for the next tick so we don't get event ordering problems
 				setTimeout(() => fCallback(pError), 0);

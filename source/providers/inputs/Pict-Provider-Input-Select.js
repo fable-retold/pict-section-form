@@ -62,6 +62,29 @@ class CustomInputHandler extends libPictSectionInputExtension
 	}
 
 	/**
+	 * Records the option ids on the element and reports whether they differ from what it last rendered,
+	 * so a refresh on every marshal does not rebuild (and blur) a dropdown whose options are unchanged.
+	 *
+	 * @param {HTMLElement} pSelectElement
+	 * @param {Array<{ id: string, text: string }>} pListData
+	 * @return {boolean}
+	 */
+	optionsChanged(pSelectElement, pListData)
+	{
+		if (!pSelectElement || !pSelectElement.setAttribute)
+		{
+			return true;
+		}
+		const tmpSignature = Array.isArray(pListData) ? pListData.map((pEntry) => `${pEntry.id}\u0001${pEntry.text}`).join('\u0002') : '';
+		if (pSelectElement.getAttribute('data-pict-options') === tmpSignature)
+		{
+			return false;
+		}
+		pSelectElement.setAttribute('data-pict-options', tmpSignature);
+		return true;
+	}
+
+	/**
 	 * Refreshes the select list for a dynamic input.
 	 * @param {Object} pView - The view object.
 	 * @param {Object} pGroup - The group object.
@@ -91,6 +114,10 @@ class CustomInputHandler extends libPictSectionInputExtension
 		tmpListData = this.pict.providers.ListDistilling.filterList(pView, pInput, tmpListData);
 
 		tmpInputSelectElement = tmpInputSelectElement[0];
+		if (!this.optionsChanged(tmpInputSelectElement, tmpListData))
+		{
+			return;
+		}
 		// HAX
 		tmpInputSelectElement.innerHTML = '';
 
@@ -128,7 +155,7 @@ class CustomInputHandler extends libPictSectionInputExtension
 			tmpListData = this.pict.providers.DynamicMetaLists.getList(pInput.PictForm.SelectOptionsPickList);
 		}
 
-		tmpListData = this.pict.providers.ListDistilling.filterList(pView, pInput, tmpListData);
+		tmpListData = this.pict.providers.ListDistilling.filterList(pView, pInput, tmpListData, pRowIndex);
 
 		// TODO: Determine later if this should ever be an array.
 		if (!Array.isArray(tmpInputSelectElement) || tmpInputSelectElement.length < 1)
@@ -137,6 +164,11 @@ class CustomInputHandler extends libPictSectionInputExtension
 		}
 
 		tmpInputSelectElement = tmpInputSelectElement[0];
+
+		if (!this.optionsChanged(tmpInputSelectElement, tmpListData))
+		{
+			return;
+		}
 
 		// HAX
 		tmpInputSelectElement.innerHTML = '';
@@ -234,6 +266,10 @@ class CustomInputHandler extends libPictSectionInputExtension
 	 */
 	onDataMarshalToForm(pView, pGroup, pRow, pInput, pValue, pHTMLSelector, pTransactionGUID)
 	{
+		if (this.pict.providers.ListDistilling.getFacetRule(pInput))
+		{
+			this.refreshSelectList(pView, pGroup, pRow, pInput, pValue, pHTMLSelector);
+		}
 		/** @type {Array<HTMLElement>|HTMLElement} */
 		const tmpInputSelectElements = this.pict.ContentAssignment.getElement(this.getSelectInputHTMLID(pInput.Macro.RawHTMLID));
 		if (!tmpInputSelectElements || tmpInputSelectElements.length < 1)
@@ -281,6 +317,10 @@ class CustomInputHandler extends libPictSectionInputExtension
 	 */
 	onDataMarshalToFormTabular(pView, pGroup, pInput, pValue, pHTMLSelector, pRowIndex, pTransactionGUID)
 	{
+		if (this.pict.providers.ListDistilling.getFacetRule(pInput))
+		{
+			this.refreshSelectListTabular(pView, pGroup, null, pInput, pValue, pHTMLSelector, pRowIndex);
+		}
 		/** @type {Array<HTMLElement>|HTMLElement} */
 		const tmpInputSelectElements = this.pict.ContentAssignment.getElement(this.getTabularSelectDropdownID(pInput.Macro.RawHTMLID, pRowIndex));
 		if (!tmpInputSelectElements || tmpInputSelectElements.length < 1)

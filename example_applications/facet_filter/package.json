@@ -1,0 +1,27 @@
+{
+    "name": "facet_filter_application",
+    "version": "1.0.0",
+    "description": "Dropdowns over one shared catalog, each narrowed by the others in its row, served by a small REST stand-in.",
+    "main": "Facet-Filter-Application.js",
+    "scripts": {
+        "start": "node Facet-Filter-Server.js",
+        "build": "npx quack build && npx quack copy",
+        "smoke": "node Facet-Filter-Smoke-Runner.js"
+    },
+    "license": "MIT",
+    "devDependencies": {
+    },
+    "copyFilesSettings": {
+        "whenFileExists": "overwrite"
+    },
+    "copyFiles": [
+        {
+            "from": "./html/*",
+            "to": "./dist/"
+        },
+        {
+            "from": "../../node_modules/pict/dist/*",
+            "to": "./dist/"
+        }
+    ]
+}

@@ -1,0 +1,44 @@
+{
+	"Publisher":
+	[
+		{ "IDPublisher": 1, "Name": "Harbor House", "Active": 1, "Deleted": 0 },
+		{ "IDPublisher": 2, "Name": "Lantern Press", "Active": 1, "Deleted": 0 },
+		{ "IDPublisher": 3, "Name": "Northwind Books", "Active": 1, "Deleted": 0 },
+		{ "IDPublisher": 4, "Name": "Old Mill Editions", "Active": 0, "Deleted": 0 }
+	],
+	"Book":
+	[
+		{ "IDBook": 101, "Title": "The Quiet Harbor", "IDPublisher": 1, "InPrintFrom": "2019-03-01T00:00:00.000Z", "InPrintUntil": "2030-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "Mystery", "Author": "A. Marlowe", "Language": "EN", "Current": { "Price": 14.5, "Format": "Paperback" } } },
+		{ "IDBook": 102, "Title": "Salt and Shadow", "IDPublisher": 1, "InPrintFrom": "2020-06-01T00:00:00.000Z", "InPrintUntil": "2030-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "Mystery", "Author": "A. Marlowe", "Language": "EN", "Current": { "Price": 16, "Format": "Hardcover" } } },
+		{ "IDBook": 103, "Title": "Lamplight Alley", "IDPublisher": 2, "InPrintFrom": "2021-01-15T00:00:00.000Z", "InPrintUntil": "2030-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "Mystery", "Author": "A. Marlowe", "Language": "EN", "Current": { "Price": 12, "Format": "Paperback" } } },
+		{ "IDBook": 104, "Title": "La Maison du Canal", "IDPublisher": 3, "InPrintFrom": "2018-09-01T00:00:00.000Z", "InPrintUntil": "2030-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "Mystery", "Author": "C. Duval", "Language": "FR", "Current": { "Price": 18, "Format": "Paperback" } } },
+		{ "IDBook": 105, "Title": "Le Quai Froid", "IDPublisher": 3, "InPrintFrom": "2022-02-01T00:00:00.000Z", "InPrintUntil": "2030-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "Mystery", "Author": "C. Duval", "Language": "FR", "Current": { "Price": 19.5, "Format": "Hardcover" } } },
+		{ "IDBook": 106, "Title": "Tides in Verse", "IDPublisher": 2, "InPrintFrom": "2017-04-01T00:00:00.000Z", "InPrintUntil": "2030-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "Poetry", "Author": "A. Marlowe", "Language": "EN", "Current": { "Price": 11, "Format": "Paperback" } } },
+		{ "IDBook": 107, "Title": "Paper Cranes", "IDPublisher": 2, "InPrintFrom": "2016-05-01T00:00:00.000Z", "InPrintUntil": "2030-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "Poetry", "Author": "E. Sato", "Language": "EN", "Current": { "Price": 9.5, "Format": "Paperback" } } },
+		{ "IDBook": 108, "Title": "Small Worlds", "IDPublisher": 1, "InPrintFrom": "2023-08-01T00:00:00.000Z", "InPrintUntil": "2030-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "Science", "Author": "R. Okafor", "Language": "EN", "Current": { "Price": 24, "Format": "Hardcover" } } },
+		{ "IDBook": 109, "Title": "Das Leise Licht", "IDPublisher": 3, "InPrintFrom": "2015-01-01T00:00:00.000Z", "InPrintUntil": "2024-06-30T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "Science", "Author": "L. Brandt", "Language": "DE", "Current": { "Price": 21, "Format": "Hardcover" } } },
+		{ "IDBook": 110, "Title": "Kalte Sterne", "IDPublisher": 3, "InPrintFrom": "2021-10-01T00:00:00.000Z", "InPrintUntil": "2030-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "Science", "Author": "L. Brandt", "Language": "DE", "Current": { "Price": 22.5, "Format": "Paperback" } } },
+		{ "IDBook": 111, "Title": "Rivers of the Steppe", "IDPublisher": 1, "InPrintFrom": "2019-11-01T00:00:00.000Z", "InPrintUntil": "2030-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "History", "Author": "M. Petrov", "Language": "EN", "Current": { "Price": 27, "Format": "Hardcover" } } },
+		{ "IDBook": 112, "Title": "The Winter Ports", "IDPublisher": 1, "InPrintFrom": "2022-03-01T00:00:00.000Z", "InPrintUntil": "2030-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "History", "Author": "M. Petrov", "Language": "EN", "Current": { "Price": 25, "Format": "Paperback" } } },
+		{ "IDBook": 113, "Title": "Collected Fragments", "IDPublisher": 2, "InPrintFrom": "2020-01-01T00:00:00.000Z", "InPrintUntil": "2030-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Author": "Various", "Language": "EN", "Current": { "Price": 8, "Format": "Paperback" } } },
+		{ "IDBook": 114, "Title": "Harbor Lights (First Edition)", "IDPublisher": 1, "InPrintFrom": "2012-01-01T00:00:00.000Z", "InPrintUntil": "2023-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "Mystery", "Author": "A. Marlowe", "Language": "EN", "Current": { "Price": 30, "Format": "Hardcover" } } },
+		{ "IDBook": 115, "Title": "Northern Almanac", "IDPublisher": 2, "InPrintFrom": "2027-03-01T00:00:00.000Z", "InPrintUntil": "2035-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "Science", "Author": "R. Okafor", "Language": "EN", "Current": { "Price": 26, "Format": "Hardcover" } } },
+		{ "IDBook": 116, "Title": "The Mill Race", "IDPublisher": 4, "InPrintFrom": "2019-01-01T00:00:00.000Z", "InPrintUntil": "2030-12-31T00:00:00.000Z", "Deleted": 0,
+			"Details": { "Genre": "History", "Author": "M. Petrov", "Language": "EN", "Current": { "Price": 20, "Format": "Paperback" } } }
+	]
+}

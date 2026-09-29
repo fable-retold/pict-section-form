@@ -42,6 +42,8 @@
   - [RichText](input_providers/014-rich-text.md)
   - [Diagram](input_providers/015-diagram.md)
 
+  - [FacetFilter](input_providers/016-facet-filter.md)
+
 - Examples
 
   - [Simple Table](#/page/examples/simple_table/README)

@@ -35,6 +35,18 @@ declare class CustomInputHandler extends libPictSectionInputExtension {
      */
     getTabularSelectDropdownID(pInputHTMLID: string, pRowIndex: number): string;
     /**
+     * Records the option ids on the element and reports whether they differ from what it last rendered,
+     * so a refresh on every marshal does not rebuild (and blur) a dropdown whose options are unchanged.
+     *
+     * @param {HTMLElement} pSelectElement
+     * @param {Array<{ id: string, text: string }>} pListData
+     * @return {boolean}
+     */
+    optionsChanged(pSelectElement: HTMLElement, pListData: Array<{
+        id: string;
+        text: string;
+    }>): boolean;
+    /**
      * Refreshes the select list for a dynamic input.
      * @param {Object} pView - The view object.
      * @param {Object} pGroup - The group object.

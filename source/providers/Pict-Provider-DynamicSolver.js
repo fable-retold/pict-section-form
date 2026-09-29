@@ -20,6 +20,7 @@ const libInputTemplatedEntityLookup = require('./inputs/Pict-Provider-Input-Temp
 const libInputChart = require('./inputs/Pict-Provider-Input-Chart.js');
 const libInputTabularTriggerGroup = require('./inputs/Pict-Provider-Input-TabularTriggerGroup.js');
 const libInputObjectEditor = require('./inputs/Pict-Provider-Input-ObjectEditor.js');
+const libInputFacetFilter = require('./inputs/Pict-Provider-Input-FacetFilter.js');
 
 /** @type {Record<string, any>} */
 const _DefaultProviderConfiguration = (
@@ -84,6 +85,7 @@ class PictDynamicSolver extends libPictProvider
 		this.pict.addProviderSingleton('Pict-Input-Chart', libInputChart.default_configuration, libInputChart);
 		this.pict.addProviderSingleton('Pict-Input-TabularTriggerGroup', libInputTabularTriggerGroup.default_configuration, libInputTabularTriggerGroup);
 		this.pict.addProviderSingleton('Pict-Input-ObjectEditor', libInputObjectEditor.default_configuration, libInputObjectEditor);
+		this.pict.addProviderSingleton('Pict-Input-FacetFilter', libInputFacetFilter.default_configuration, libInputFacetFilter);
 	}
 
 	logSolveOutcome(pSolveOutcome)

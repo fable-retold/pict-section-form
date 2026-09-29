@@ -444,6 +444,17 @@ suite('PictSectionForm injection conformance', () =>
 			Expect(tmpColumn.PictForm.TabularTriggerGroup[0].TriggerGroupHash, 'a column trigger group is salted with the rest of the copy').to.equal('CrateRowTally_alpha');
 		});
 
+		test('a Facet column\'s join list is shared application state, so injection leaves its rule alone', () =>
+		{
+			const tmpMetacontroller = buildMetacontroller(_Cases.MARSHAL_DESTINATION);
+			const tmpSalted = tmpMetacontroller.createDistinctManifest(_Fixture.InjectableManifest, 'alpha');
+			const tmpColumn = tmpSalted.ReferenceManifests.CrateRow.Descriptors.Bin;
+			Expect(tmpColumn.Hash).to.equal('Bin');
+			Expect(tmpColumn.PictForm.Providers).to.deep.equal([ 'Pict-Input-FacetFilter' ]);
+			Expect(tmpColumn.PictForm.ListFilterRules[0].JoinListAddress, 'the join list is global, not part of the copy').to.equal('AppData.BinCatalog');
+			Expect(tmpColumn.PictForm.ListFilterRules[0].JoinListValueAddress, 'addresses inside join records are untouched').to.equal('Bin');
+		});
+
 		test('every input of the fixture is reachable by its salted hash', () =>
 		{
 			const tmpMetacontroller = buildMetacontroller(_Cases.MARSHAL_DESTINATION);
