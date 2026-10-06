@@ -66,6 +66,55 @@ const libCSS = /*css*/`
 	border-radius: 5px; padding: 0.1rem 0.4rem; margin-bottom: 0.35rem; }
 .pict-chart-legend-toggle:hover { color: var(--theme-color-text-primary, #1f2733);
 	border-color: var(--theme-color-border-strong, #c2c9d2); }
+
+/* ---------------------------------------------------------------------------
+   PRINT
+   ---------------------------------------------------------------------------
+   Three things break when a Chart.js chart is printed from the browser, and none
+   of them is "canvas does not print" -- the canvas rasterises fine.
+
+   1. CLIPPING. Chart.js writes an INLINE style.width/height on the canvas taken
+      from the SCREEN layout, and only corrects it from a ResizeObserver whose
+      callback runs in requestAnimationFrame -- which never fires inside the
+      synchronous print snapshot. So a canvas laid out at ~930px keeps that width
+      on a page box narrower than it, and the right-hand side is simply cut off.
+      max-width:100% overrides the inline width; height:auto keeps the ratio.
+
+   2. VANISHING SWATCHES. The legend swatches are painted with background and
+      ::before/::after gradients, and browsers drop backgrounds in print unless
+      the reader happens to tick "Background graphics". Without these the legend
+      prints as a column of empty boxes and nothing can be matched to a line --
+      on a control chart, where telling the reading from the limits is the entire
+      point, that is worse than printing no legend at all.
+
+   3. INTERACTIVE AFFORDANCES. A hide-legend button and a collapse caret are
+      meaningless on paper, and a group a reader happened to collapse on screen
+      must still print -- collapsing is a space affordance, not a statement about
+      the data.
+*/
+@media print
+{
+	.pict-input-chart canvas { max-width: 100% !important; height: auto !important; }
+	.pict-input-chart { break-inside: avoid; page-break-inside: avoid; }
+
+	/* Legend under the plot so the plot gets the full page width. */
+	.pict-chart-shell { display: block; break-inside: avoid; page-break-inside: avoid; }
+	.pict-chart-canvas-area { width: 100%; }
+	.pict-chart-legend { max-width: none; width: 100%; margin-top: 0.35rem; }
+	.pict-chart-legend-items { flex-direction: row; flex-wrap: wrap; gap: 0.1rem 0.75rem; }
+
+	.pict-chart-legend-toggle { display: none !important; }
+
+	.pict-chart-legend-group.pict-collapsed .pict-chart-legend-items { display: flex !important; }
+
+	.pict-chart-legend-swatch,
+	.pict-chart-legend-swatch::before,
+	.pict-chart-legend-swatch::after
+	{
+		-webkit-print-color-adjust: exact;
+		print-color-adjust: exact;
+	}
+}
 `;
 
 module.exports = libCSS;
