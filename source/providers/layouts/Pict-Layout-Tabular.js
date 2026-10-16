@@ -1578,6 +1578,68 @@ class TabularLayout extends libPictSectionGroupLayout
 	}
 
 	/**
+	 * A `<colgroup>` sizing the visible data columns as percentages of the table,
+	 * in proportion to each descriptor's `PictForm.Width` (missing, zero or
+	 * unparseable counts as 1, as in the Record layout). Leading non-data columns
+	 * get an unsized `<col>` so the data widths line up.
+	 *
+	 * Returns an empty string when no visible column carries a positive Width, so
+	 * tables without widths keep the browser's automatic column sizing.
+	 *
+	 * @param {Object} pGroup
+	 * @param {Set<string>|null} pChooserHiddenSet - columns hidden by the ColumnChooser
+	 * @param {number} pLeadingColumnCount - row-select, row label and left editing-control columns
+	 * @returns {string}
+	 */
+	_buildTabularColGroupHTML(pGroup, pChooserHiddenSet, pLeadingColumnCount)
+	{
+		let tmpRawWidths = [];
+		let tmpAnyWidth = false;
+		for (let k = 0; k < pGroup.supportingManifest.elementAddresses.length; k++)
+		{
+			let tmpHash = pGroup.supportingManifest.elementAddresses[k];
+			let tmpDescriptor = pGroup.supportingManifest.elementDescriptors[tmpHash];
+			if (!tmpDescriptor || (tmpDescriptor.PictForm && tmpDescriptor.PictForm.TabularHidden))
+			{
+				continue;
+			}
+			if (pChooserHiddenSet && pChooserHiddenSet.has(String(tmpHash)))
+			{
+				continue;
+			}
+			let tmpWidth = Math.abs(parseFloat(tmpDescriptor.PictForm ? tmpDescriptor.PictForm.Width : undefined));
+			if (!tmpWidth || isNaN(tmpWidth))
+			{
+				tmpWidth = 1;
+			}
+			else
+			{
+				tmpAnyWidth = true;
+			}
+			tmpRawWidths.push(tmpWidth);
+		}
+
+		if (!tmpAnyWidth)
+		{
+			return '';
+		}
+
+		let tmpTotal = tmpRawWidths.reduce((pSum, pWidth) => pSum + pWidth, 0);
+		let tmpColGroup = '<colgroup class="pict-tabular-colgroup">';
+		for (let l = 0; l < pLeadingColumnCount; l++)
+		{
+			tmpColGroup += '<col>';
+		}
+		for (let c = 0; c < tmpRawWidths.length; c++)
+		{
+			let tmpPercent = Math.round((tmpRawWidths[c] / tmpTotal) * 10000) / 100;
+			tmpColGroup += `<col style="width:${tmpPercent}%">`;
+		}
+		tmpColGroup += '</colgroup>';
+		return tmpColGroup;
+	}
+
+	/**
 	 * Generate a group layout template for a single-record dynamically generated group view.
 	 *
 	 * This is the standard name / field entry form that you're used to filling out for addresses
@@ -1662,6 +1724,9 @@ class TabularLayout extends libPictSectionGroupLayout
 		}
 
 		tmpTemplate += tmpMetatemplateGenerator.getMetatemplateTemplateReference(pView, `-TabularTemplate-Group-Prefix`, `getGroup("${pGroup.GroupIndex}")`);
+
+		// Group-Prefix ends with the <table> open tag and RowHeader-Prefix starts with <thead>.
+		tmpTemplate += this._buildTabularColGroupHTML(pGroup, tmpChooserHiddenSet, tmpLeadingColumnCount);
 
 		// Header section
 		tmpTemplate += tmpMetatemplateGenerator.getMetatemplateTemplateReference(pView, `-TabularTemplate-RowHeader-Prefix`, `getGroup("${pGroup.GroupIndex}")`);

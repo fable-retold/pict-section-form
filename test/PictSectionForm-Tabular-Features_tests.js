@@ -39,6 +39,27 @@ const _ReferenceManifests =
 			}
 		}
 	},
+	SizedStudentEditor:
+	{
+		Scope: 'SizedStudentEditor',
+		Descriptors:
+		{
+			Section:
+			{
+				Name: 'Section',
+				Hash: 'Section',
+				DataType: 'String',
+				PictForm: { Section: 'Class', Group: 'Students', Width: 1 }
+			},
+			StudentName:
+			{
+				Name: 'Student',
+				Hash: 'StudentName',
+				DataType: 'String',
+				PictForm: { Section: 'Class', Group: 'Students', Width: 3 }
+			}
+		}
+	},
 	GradeRowEditor:
 	{
 		Scope: 'GradeRowEditor',
@@ -2031,6 +2052,120 @@ suite('PictSectionForm Tabular Features', () =>
 				Expect(tmpAfter[1]).to.equal('Alice', 'displaced row shifted down');
 				Expect(tmpFullRenderCalls).to.equal(0, 'a reorder must not full-render the source view (the slow select2 teardown)');
 				Expect(tmpRepaintHookCalls).to.equal(1, 'a reorder repaints inputs in place via the onTabularRowReorderRepaint hook');
+			}, fDone);
+		});
+	});
+
+	suite('Tabular column widths (PictForm.Width)', () =>
+	{
+		function makeGroup(pDescriptors)
+		{
+			return { supportingManifest: { elementAddresses: Object.keys(pDescriptors), elementDescriptors: pDescriptors } };
+		}
+
+		test('No colgroup when no column carries a Width', (fDone) =>
+		{
+			let App = makeApplication({
+				Hash: 'Students',
+				Layout: 'Tabular',
+				RecordSetAddress: 'Students',
+				RecordManifest: 'StudentEditor'
+			});
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpTemplate = _Pict.providers['Pict-Layout-Tabular'].generateGroupLayoutTemplate(tmpView, tmpGroup);
+				Expect(tmpTemplate).to.not.contain('<colgroup', 'tables without widths keep automatic sizing');
+			}, fDone);
+		});
+
+		test('Widths become percentages in a colgroup between the table open and the header', (fDone) =>
+		{
+			let App = makeApplication({
+				Hash: 'Students',
+				Layout: 'Tabular',
+				RecordSetAddress: 'Students',
+				RecordManifest: 'SizedStudentEditor'
+			});
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpTemplate = _Pict.providers['Pict-Layout-Tabular'].generateGroupLayoutTemplate(tmpView, tmpGroup);
+				Expect(tmpTemplate).to.contain('<colgroup class="pict-tabular-colgroup"><col style="width:25%"><col style="width:75%"></colgroup>');
+				let tmpColGroupAt = tmpTemplate.indexOf('<colgroup');
+				Expect(tmpColGroupAt).to.be.greaterThan(tmpTemplate.indexOf('-TabularTemplate-Group-Prefix'), 'after the table open');
+				Expect(tmpColGroupAt).to.be.lessThan(tmpTemplate.indexOf('-TabularTemplate-RowHeader-Prefix'), 'before the header');
+			}, fDone);
+		});
+
+		test('Columns without a usable Width count as 1; zero is not hidden', (fDone) =>
+		{
+			let App = makeApplication({
+				Hash: 'Students',
+				Layout: 'Tabular',
+				RecordSetAddress: 'Students',
+				RecordManifest: 'StudentEditor'
+			});
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpLayout = _Pict.providers['Pict-Layout-Tabular'];
+				let tmpHTML = tmpLayout._buildTabularColGroupHTML(makeGroup(
+					{
+						A: { Hash: 'A', PictForm: { Width: 2 } },
+						B: { Hash: 'B', PictForm: { Width: 0 } },
+						C: { Hash: 'C', PictForm: { Width: 'wide' } },
+						D: { Hash: 'D' }
+					}), null, 0);
+				Expect(tmpHTML).to.equal('<colgroup class="pict-tabular-colgroup"><col style="width:40%"><col style="width:20%"><col style="width:20%"><col style="width:20%"></colgroup>');
+				let tmpZeroHTML = tmpLayout._buildTabularColGroupHTML(makeGroup(
+					{
+						A: { Hash: 'A', PictForm: { Width: 0 } },
+						B: { Hash: 'B', PictForm: { Width: 0 } }
+					}), null, 0);
+				Expect(tmpZeroHTML).to.equal('', 'all-zero widths size nothing');
+			}, fDone);
+		});
+
+		test('Hidden columns are skipped and leading columns get unsized cols', (fDone) =>
+		{
+			let App = makeApplication({
+				Hash: 'Students',
+				Layout: 'Tabular',
+				RecordSetAddress: 'Students',
+				RecordManifest: 'StudentEditor'
+			});
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpLayout = _Pict.providers['Pict-Layout-Tabular'];
+				let tmpHTML = tmpLayout._buildTabularColGroupHTML(makeGroup(
+					{
+						A: { Hash: 'A', PictForm: { Width: 1 } },
+						Secret: { Hash: 'Secret', PictForm: { Width: 50, TabularHidden: true } },
+						Chosen: { Hash: 'Chosen', PictForm: { Width: 50 } },
+						B: { Hash: 'B', PictForm: { Width: 2 } }
+					}), new Set([ 'Chosen' ]), 2);
+				Expect(tmpHTML).to.equal('<colgroup class="pict-tabular-colgroup"><col><col><col style="width:33.33%"><col style="width:66.67%"></colgroup>');
+			}, fDone);
+		});
+
+		test('Chooser-hidden columns drop out of the baked colgroup', (fDone) =>
+		{
+			let App = makeApplication({
+				Hash: 'Students',
+				Layout: 'Tabular',
+				RecordSetAddress: 'Students',
+				RecordManifest: 'SizedStudentEditor',
+				ColumnChooser: true,
+				RowSelection: true
+			}, { Students_HiddenColumns: [ 'StudentName' ] });
+			bootstrap(App, (_Pict) =>
+			{
+				let tmpView = _Pict.views['PictSectionForm-Class'];
+				let tmpGroup = tmpView.sectionDefinition.Groups[0];
+				let tmpTemplate = _Pict.providers['Pict-Layout-Tabular'].generateGroupLayoutTemplate(tmpView, tmpGroup);
+				Expect(tmpTemplate).to.contain('<colgroup class="pict-tabular-colgroup"><col><col style="width:100%"></colgroup>', 'row-select col, then the one visible column');
 			}, fDone);
 		});
 	});
