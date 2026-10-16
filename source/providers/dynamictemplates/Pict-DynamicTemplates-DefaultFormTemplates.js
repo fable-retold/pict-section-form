@@ -260,7 +260,7 @@ Glug glug glug Oo... -->
 			"DefaultInputExtensions": ["Pict-Input-Chart"],
 			"Template": /*HTML*/`
 					<!-- InputType Chart {~D:Record.Hash~} {~D:Record.DataType~} -->
-					<div style="width:{~DWAF:Record.PictForm.QuantizedWidth:100~}%; display:inline-block;">
+					<div style="width:{~DWAF:Record.PictForm.QuantizedWidth:100~}%; margin-left:{~DWAF:Record.PictForm.QuantizedWidthOffset:0~}%; display:inline-block;">
 						<input type="hidden" id="CONFIG-FOR-{~D:Record.Macro.RawHTMLID~}" value="">
 						<h3><span>{~D:Record.Name~}:</span></h3>
 						<!-- ChartHeight (pixels) sets the plot area. It is min-height rather than height so the
