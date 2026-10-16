@@ -12,6 +12,40 @@ class RecordLayout extends libPictSectionGroupLayout
 		this.fable;
 		/** @type {any} */
 		this.log;
+
+		/** @type {Array<(pInput: any) => boolean>} */
+		this.layoutExcludedInputChecks = [];
+	}
+
+	/**
+	 * Register a check that marks an input as taking no width in its row. An excluded
+	 * input gets `PictForm.LayoutExcluded = true` and a QuantizedWidth of 0, and the
+	 * other inputs in the row share its space.
+	 *
+	 * @param {(pInput: any) => boolean} fCheck - returns true when the input takes no width
+	 */
+	registerLayoutExcludedInputCheck(fCheck)
+	{
+		if ((typeof fCheck === 'function') && !this.layoutExcludedInputChecks.includes(fCheck))
+		{
+			this.layoutExcludedInputChecks.push(fCheck);
+		}
+	}
+
+	/**
+	 * @param {any} pInput
+	 * @returns {boolean} - true when any registered check excludes the input from row width
+	 */
+	isLayoutExcludedInput(pInput)
+	{
+		for (let i = 0; i < this.layoutExcludedInputChecks.length; i++)
+		{
+			if (this.layoutExcludedInputChecks[i](pInput))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -76,8 +110,20 @@ class RecordLayout extends libPictSectionGroupLayout
 				{
 					tmpInputWidth = 1;
 				}
+				let tmpInputWidthOffset = Math.abs(parseFloat(tmpInput.PictForm.WidthOffset));
+				if (!tmpInputWidthOffset || isNaN(tmpInputWidthOffset))
+				{
+					tmpInputWidthOffset = 0;
+				}
+				tmpInput.PictForm.LayoutExcluded = this.isLayoutExcludedInput(tmpInput);
+				if (tmpInput.PictForm.LayoutExcluded)
+				{
+					tmpInputWidth = 0;
+					tmpInputWidthOffset = 0;
+				}
 				tmpInput.PictForm.RawWidth = tmpInputWidth;
-				tmpRow.WidthTotalRaw += tmpInputWidth;
+				tmpInput.PictForm.RawWidthOffset = tmpInputWidthOffset;
+				tmpRow.WidthTotalRaw += tmpInputWidth + tmpInputWidthOffset;
 
 				//tmpTemplate += tmpMetatemplateGenerator.getInputMetatemplateTemplateReference(pView, tmpInput.DataType, tmpInput.PictForm.InputType, `getInput("${pGroup.GroupIndex}","${j}","${k}")`);
 			}
@@ -107,7 +153,16 @@ class RecordLayout extends libPictSectionGroupLayout
 			for (let k = 0; k < tmpRow.Inputs.length; k++)
 			{
 				let tmpInput = tmpRow.Inputs[k];
-				tmpInput.PictForm.QuantizedWidth = Math.round((tmpInput.PictForm.RawWidth / tmpRow.WidthTotalRaw) * tmpGroupQuantizedWidth);
+				if (tmpRow.WidthTotalRaw > 0)
+				{
+					tmpInput.PictForm.QuantizedWidth = Math.round((tmpInput.PictForm.RawWidth / tmpRow.WidthTotalRaw) * tmpGroupQuantizedWidth);
+					tmpInput.PictForm.QuantizedWidthOffset = Math.round((tmpInput.PictForm.RawWidthOffset / tmpRow.WidthTotalRaw) * tmpGroupQuantizedWidth);
+				}
+				else
+				{
+					tmpInput.PictForm.QuantizedWidth = 0;
+					tmpInput.PictForm.QuantizedWidthOffset = 0;
+				}
 				//this.fable.log.trace(`Quantized input width for Group ${pGroup.GroupIndex} Row ${j} Input ${k} (${tmpInput.Name}) to ${tmpInput.PictForm.QuantizedWidth} (Raw: ${tmpInput.PictForm.RawWidth} / Total Raw: ${tmpRow.WidthTotalRaw} / Group Quantization: ${tmpGroupQuantizedWidth})`);
 
 				tmpTemplate += tmpMetatemplateGenerator.getInputMetatemplateTemplateReference(pView, tmpInput.DataType, tmpInput.PictForm.InputType, `getInput("${pGroup.GroupIndex}","${j}","${k}")`);
