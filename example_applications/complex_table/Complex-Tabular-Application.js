@@ -113,6 +113,28 @@ module.exports.default_configuration.pict_configuration = {
 					"HiddenValue": "HiddenThree",
 				},
 			],
+			// Read by the Chart section's Address and layered examples
+			ChartExamples:
+			{
+				Labels: ['Spring', 'Summer', 'Autumn', 'Winter'],
+				Datasets:
+				[
+					{ label: 'Apples', data: [12, 30, 44, 9] },
+					{ label: 'Pears', data: [8, 21, 35, 6] }
+				],
+				CoreConfiguration:
+				{
+					type: 'line',
+					options: { plugins: { title: { display: true, text: 'Labels, datasets and core configuration read from AppData' } } }
+				},
+				Harvest:
+				[
+					{ Fruit: 'Apples', Picked: 14, Sold: 11 },
+					{ Fruit: 'Pears', Picked: 9, Sold: 9 },
+					{ Fruit: 'Plums', Picked: 6, Sold: 4 },
+					{ Fruit: 'Figs', Picked: 11, Sold: 7 }
+				]
+			},
 		}),
 
 	DefaultFormManifest: {
@@ -649,6 +671,106 @@ module.exports.default_configuration.pict_configuration = {
 							}
 						}
 					}
+				}
+			},
+
+			"AddressGraphExample": {
+				Name: "AddressGraphExample",
+				Hash: "AddressGraphExample",
+				DataType: "Object",
+				PictForm:
+				{
+					Section: "Chart",
+					Group: "SimpleChart",
+					Row: 4,
+					Width: 6,
+					InputType: "Chart",
+
+					// All three Address keys resolve against the app state
+					ChartLabelsAddress: "AppData.ChartExamples.Labels",
+					ChartDatasetsAddress: "AppData.ChartExamples.Datasets",
+					ChartConfigCorePrototypeAddress: "AppData.ChartExamples.CoreConfiguration"
+				}
+			},
+
+			"LayeredGraphExample": {
+				Name: "LayeredGraphExample",
+				Hash: "LayeredGraphExample",
+				DataType: "Object",
+				PictForm:
+				{
+					Section: "Chart",
+					Group: "SimpleChart",
+					Row: 4,
+					Width: 6,
+					InputType: "Chart",
+
+					ChartType: "bar",
+					ChartLabelsSolver: `flatten(ChartExamples.Harvest[].Fruit)`,
+
+					// The Raw datasets come first; the solver datasets are added after them
+					ChartDatasetsRaw: [
+						{
+							type: 'line',
+							label: 'Goal',
+							data: [10, 10, 10, 10]
+						}],
+					ChartDatasetsSolvers:
+						[
+							{
+								Label: 'Picked',
+								DataSolver: `flatten(ChartExamples.Harvest[].Picked)`
+							}
+						],
+
+					ChartConfigCorePrototypeRaw:
+					{
+						options: { plugins: { title: { display: true, text: 'Raw Goal line plus a solver Picked series' } } }
+					}
+				}
+			},
+
+			"LineStyleGraphExample": {
+				Name: "LineStyleGraphExample",
+				Hash: "LineStyleGraphExample",
+				DataType: "Object",
+				PictForm:
+				{
+					Section: "Chart",
+					Group: "SimpleChart",
+					Row: 5,
+					Width: 12,
+					InputType: "Chart",
+
+					ChartType: "line",
+					ChartLabelsSolver: `flatten(ChartExamples.Harvest[].Fruit)`,
+					ChartDatasetsSolvers:
+						[
+							{
+								Label: 'Picked (chart default curve and points)',
+								DataSolver: `flatten(ChartExamples.Harvest[].Picked)`
+							},
+							{
+								Label: 'Sold (Tension 0, PointRadius 0)',
+								DataSolver: `flatten(ChartExamples.Harvest[].Sold)`,
+								Tension: 0,
+								PointRadius: 0
+							}
+						],
+
+					// A curve and large points by default, so a 0 on the dataset is visible
+					ChartJSOptionsCorePrototype:
+					{
+						options: {
+							elements: {
+								line: { tension: 0.4 },
+								point: { radius: 6 }
+							},
+							plugins: { title: { display: true, text: 'Tension 0 and PointRadius 0 override the chart defaults' } }
+						}
+					},
+
+					ChartLegend: true
 				}
 			},
 

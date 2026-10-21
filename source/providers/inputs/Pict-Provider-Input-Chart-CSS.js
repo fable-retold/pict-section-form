@@ -9,8 +9,10 @@
  * indistinguishable from the readings, wrapping into an unreadable block. This
  * legend is a vertical list, grouped, with each group toggleable as a unit.
  *
- * Everything is themeable through the --theme-color-* tokens; the hardcoded
- * values are fallbacks.
+ * Everything is themeable through the --theme-color-* tokens (text also through
+ * --pict-chart-text-color, which the canvas follows too). Text falls back to the
+ * inherited colour, so a host without the tokens still gets a legend that
+ * follows its light or dark theme.
  */
 const libCSS = /*css*/`
 .pict-chart-shell { display: flex; align-items: stretch; gap: 0.75rem; width: 100%; }
@@ -19,15 +21,15 @@ const libCSS = /*css*/`
 .pict-chart-shell .pict-chart-canvas-area { flex: 1 1 auto; min-width: 0; position: relative; }
 
 .pict-chart-legend { flex: 0 0 auto; max-width: 15rem; font-size: 0.78rem; line-height: 1.35;
-	color: var(--theme-color-text-primary, #1f2733); user-select: none; }
+	color: var(--pict-chart-text-color, var(--theme-color-text-primary, currentColor)); user-select: none; }
 .pict-chart-legend-top .pict-chart-legend,
 .pict-chart-legend-bottom .pict-chart-legend { max-width: none; }
 
 .pict-chart-legend-group + .pict-chart-legend-group { margin-top: 0.5rem; }
 .pict-chart-legend-group-header { display: flex; align-items: center; gap: 0.35rem; cursor: pointer;
 	font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
-	color: var(--theme-color-text-muted, #6b7686); padding: 0.15rem 0; }
-.pict-chart-legend-group-header:hover { color: var(--theme-color-text-primary, #1f2733); }
+	color: var(--theme-color-text-muted, currentColor); padding: 0.15rem 0; }
+.pict-chart-legend-group-header:hover { color: var(--theme-color-text-primary, currentColor); }
 .pict-chart-legend-group-caret { font-size: 0.6rem; transition: transform 0.12s ease; }
 .pict-chart-legend-group.pict-collapsed .pict-chart-legend-group-caret { transform: rotate(-90deg); }
 .pict-chart-legend-group.pict-collapsed .pict-chart-legend-items { display: none; }
@@ -61,10 +63,10 @@ const libCSS = /*css*/`
 	transform: translate(-50%, -50%); width: 0.45rem; height: 0.45rem; border-radius: 50%; background: currentColor; }
 
 .pict-chart-legend-toggle { display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer;
-	font-size: 0.68rem; color: var(--theme-color-text-muted, #6b7686);
+	font-size: 0.68rem; color: var(--theme-color-text-muted, currentColor);
 	background: none; border: 1px solid var(--theme-color-border-light, #e8ebf0);
 	border-radius: 5px; padding: 0.1rem 0.4rem; margin-bottom: 0.35rem; }
-.pict-chart-legend-toggle:hover { color: var(--theme-color-text-primary, #1f2733);
+.pict-chart-legend-toggle:hover { color: var(--theme-color-text-primary, currentColor);
 	border-color: var(--theme-color-border-strong, #c2c9d2); }
 
 /* ---------------------------------------------------------------------------
