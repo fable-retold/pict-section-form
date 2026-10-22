@@ -131,6 +131,7 @@ class CustomInputHandler extends libPictSectionInputExtension
 		// Legend visibility + collapsed groups, per input hash, so a redraw does not
 		// undo what the user toggled.
 		this.currentChartLegendState = {};
+		this.currentChartThemeColors = {};
 
 		if (this.pict && this.pict.CSSMap && typeof this.pict.CSSMap.addCSS === 'function')
 		{
@@ -345,6 +346,188 @@ class CustomInputHandler extends libPictSectionInputExtension
 	}
 
 	/**
+	 * Resolve the text and grid colours a chart should draw with from the page
+	 * around its canvas, so the canvas follows the host's light or dark theme the
+	 * way the surrounding HTML does. `--pict-chart-text-color` and
+	 * `--pict-chart-grid-color` win when set; otherwise the text colour is the
+	 * canvas's inherited CSS `color` and the grid is that colour faded.
+	 *
+	 * @param {Object} pInput - The PictForm input object.
+	 * @return {{ Text: string, Grid: string|null }|null} Null when there is no rendered canvas to read.
+	 */
+	resolveChartThemeColors(pInput)
+	{
+		if ((typeof (window) === 'undefined') || (typeof (window.getComputedStyle) !== 'function') || !pInput || !pInput.Macro)
+		{
+			return null;
+		}
+		const tmpCanvasElements = this.pict.ContentAssignment.getElement(`#CANVAS-FOR-${pInput.Macro.RawHTMLID}`);
+		if (!Array.isArray(tmpCanvasElements) || (tmpCanvasElements.length < 1))
+		{
+			return null;
+		}
+		const tmpStyle = window.getComputedStyle(tmpCanvasElements[0]);
+		const tmpText = tmpStyle.getPropertyValue('--pict-chart-text-color').trim() || tmpStyle.color;
+		if (!tmpText)
+		{
+			return null;
+		}
+		const tmpGrid = tmpStyle.getPropertyValue('--pict-chart-grid-color').trim() || this._fadeChartColor(tmpText, 0.15);
+		return { Text: tmpText, Grid: tmpGrid };
+	}
+
+	/**
+	 * @param {string} pColor - A computed `rgb()` / `rgba()` colour.
+	 * @param {number} pAlpha - The opacity to give it.
+	 * @return {string|null} The faded colour, or null when the colour is in another notation.
+	 */
+	_fadeChartColor(pColor, pAlpha)
+	{
+		const tmpMatch = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/.exec(pColor);
+		if (!tmpMatch)
+		{
+			return null;
+		}
+		return `rgba(${tmpMatch[1]}, ${tmpMatch[2]}, ${tmpMatch[3]}, ${pAlpha})`;
+	}
+
+	/**
+	 * Apply theme colours to a drawn chart, filling only the colour options the
+	 * manifest left unset, so an explicit colour always wins. Chart.js takes
+	 * tick, grid and title colours from its global defaults rather than the
+	 * chart's own `color`, so every scale the chart drew is coloured by id.
+	 *
+	 * @param {Object} pChart - The Chart.js instance.
+	 * @param {Object} pManifestOptions - The chart options as built from the manifest, before Chart.js filled in its defaults.
+	 * @param {{ Text: string, Grid: string|null }|null} pColors - From resolveChartThemeColors.
+	 * @return {boolean} True when a colour changed and the chart was updated.
+	 */
+	applyChartThemeColors(pChart, pManifestOptions, pColors)
+	{
+		if (!pChart || (typeof (pChart.options) !== 'object') || !pColors)
+		{
+			return false;
+		}
+		const tmpManifestOptions = (typeof (pManifestOptions) === 'object' && pManifestOptions !== null) ? pManifestOptions : {};
+		let tmpChanged = false;
+		const fSetUnlessExplicit = (pPath, pValue) =>
+		{
+			if (!pValue)
+			{
+				return;
+			}
+			if (typeof (this.pict.manifest.getValueByHash(tmpManifestOptions, pPath)) !== 'undefined')
+			{
+				return;
+			}
+			const tmpParts = pPath.split('.');
+			let tmpTarget = pChart.options;
+			for (let i = 0; i < tmpParts.length - 1; i++)
+			{
+				if ((typeof (tmpTarget[tmpParts[i]]) !== 'object') || (tmpTarget[tmpParts[i]] === null))
+				{
+					tmpTarget[tmpParts[i]] = {};
+				}
+				tmpTarget = tmpTarget[tmpParts[i]];
+			}
+			const tmpKey = tmpParts[tmpParts.length - 1];
+			if (tmpTarget[tmpKey] !== pValue)
+			{
+				tmpTarget[tmpKey] = pValue;
+				tmpChanged = true;
+			}
+		};
+
+		fSetUnlessExplicit('color', pColors.Text);
+		fSetUnlessExplicit('plugins.title.color', pColors.Text);
+		fSetUnlessExplicit('plugins.subtitle.color', pColors.Text);
+
+		const tmpScales = (typeof (pChart.scales) === 'object' && pChart.scales !== null) ? pChart.scales : {};
+		const tmpScaleIDs = Object.keys(tmpScales);
+		for (let i = 0; i < tmpScaleIDs.length; i++)
+		{
+			const tmpScaleAddress = `scales.${tmpScaleIDs[i]}`;
+			fSetUnlessExplicit(`${tmpScaleAddress}.ticks.color`, pColors.Text);
+			fSetUnlessExplicit(`${tmpScaleAddress}.title.color`, pColors.Text);
+			fSetUnlessExplicit(`${tmpScaleAddress}.grid.color`, pColors.Grid);
+			fSetUnlessExplicit(`${tmpScaleAddress}.border.color`, pColors.Grid);
+			const tmpScaleOptions = tmpScales[tmpScaleIDs[i]] && tmpScales[tmpScaleIDs[i]].options;
+			if (tmpScaleOptions && tmpScaleOptions.pointLabels)
+			{
+				fSetUnlessExplicit(`${tmpScaleAddress}.pointLabels.color`, pColors.Text);
+				fSetUnlessExplicit(`${tmpScaleAddress}.angleLines.color`, pColors.Grid);
+				// Radial tick labels sit on a white backdrop by default, which hides light text
+				fSetUnlessExplicit(`${tmpScaleAddress}.ticks.backdropColor`, 'transparent');
+			}
+		}
+
+		if (tmpChanged && (typeof (pChart.update) === 'function'))
+		{
+			pChart.update('none');
+		}
+		return tmpChanged;
+	}
+
+	/**
+	 * Re-read the theme colours around a chart and apply them when they differ
+	 * from the last ones applied to it (or always, when forced for a new chart).
+	 *
+	 * @param {Object} pInput - The PictForm input object.
+	 * @param {Object} pChart - The Chart.js instance.
+	 * @param {Object} pManifestOptions - The chart options as built from the manifest.
+	 * @param {boolean} [pForce] - Apply even if the colours have not changed.
+	 */
+	refreshChartThemeColors(pInput, pChart, pManifestOptions, pForce)
+	{
+		const tmpColors = this.resolveChartThemeColors(pInput);
+		if (!tmpColors)
+		{
+			return;
+		}
+		const tmpKey = `Theme-For-${pInput.Macro.RawHTMLID}`;
+		const tmpSignature = JSON.stringify(tmpColors);
+		if (!pForce && (this.currentChartThemeColors[tmpKey] === tmpSignature))
+		{
+			return;
+		}
+		this.applyChartThemeColors(pChart, pManifestOptions, tmpColors);
+		this.currentChartThemeColors[tmpKey] = tmpSignature;
+	}
+
+	/**
+	 * Copy the arrays and plain objects of a chart configuration fragment, so the
+	 * parsing steps can merge into it without writing back into the manifest or
+	 * application state it was read from. Anything else (functions such as
+	 * Chart.js callbacks, class instances) is carried across by reference.
+	 *
+	 * @param {any} pValue - The configuration fragment.
+	 * @return {any} The copy.
+	 */
+	_cloneChartConfiguration(pValue)
+	{
+		if (Array.isArray(pValue))
+		{
+			return pValue.map((pItem) => this._cloneChartConfiguration(pItem));
+		}
+		if ((pValue === null) || (typeof (pValue) !== 'object'))
+		{
+			return pValue;
+		}
+		const tmpPrototype = Object.getPrototypeOf(pValue);
+		if ((tmpPrototype !== Object.prototype) && (tmpPrototype !== null))
+		{
+			return pValue;
+		}
+		const tmpCopy = {};
+		const tmpKeys = Object.keys(pValue);
+		for (let i = 0; i < tmpKeys.length; i++)
+		{
+			tmpCopy[tmpKeys[i]] = this._cloneChartConfiguration(pValue[tmpKeys[i]]);
+		}
+		return tmpCopy;
+	}
+
+	/**
 	 * 
 	 * @param {Object} pInput - The PictForm input object
 	 * @param {*} pChartConfiguration - The current configuration object for the form
@@ -384,24 +567,25 @@ class CustomInputHandler extends libPictSectionInputExtension
 		if (typeof (tmpInputCustomConfiguration) === 'object')
 		{
 			// Merge the custom configuration into the base configuration
-			tmpParsingConfiguration = Object.assign(tmpParsingConfiguration, tmpInputCustomConfiguration);
+			tmpParsingConfiguration = Object.assign({}, tmpParsingConfiguration, tmpInputCustomConfiguration);
 		}
 
-		// Get existing data
 		let tmpExistingData;
-		if (!tmpParsingConfiguration.AddressInObject || (tmpParsingConfiguration.AddressInObject == ''))
-		{
-			tmpExistingData = tmpChartConfiguration;
-		}
-		else
-		{
-			tmpExistingData = this.pict.manifest.getValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject);
-		}
 
 		// 2. Enumerate through each step and apply them consistently
 		for (let i = 0; i < tmpParsingConfiguration.Steps.length; i++)
 		{
 			let tmpCurrentStep = tmpParsingConfiguration.Steps[i];
+
+			// Get existing data -- what the earlier steps left, so a merging step layers onto them
+			if (!tmpParsingConfiguration.AddressInObject || (tmpParsingConfiguration.AddressInObject == ''))
+			{
+				tmpExistingData = tmpChartConfiguration;
+			}
+			else
+			{
+				tmpExistingData = this.pict.manifest.getValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject);
+			}
 
 			switch (tmpCurrentStep.Method)
 			{
@@ -440,7 +624,7 @@ class CustomInputHandler extends libPictSectionInputExtension
 					}
 
 					// Get the raw data from the input
-					let tmpRawData = this.pict.manifest.getValueByHash(tmpInput, tmpCurrentStep.InputProperty);
+					let tmpRawData = this._cloneChartConfiguration(this.pict.manifest.getValueByHash(tmpInput, tmpCurrentStep.InputProperty));
 					let tmpRawDataType = typeof(tmpRawData);
 
 					// We only support objects as configuration
@@ -521,7 +705,7 @@ class CustomInputHandler extends libPictSectionInputExtension
 						break;
 					}
 
-					let tmpPotentialConfigurationObject = this.pict.resolveStateFromAddress(tmpAddress, pInput);
+					let tmpPotentialConfigurationObject = this._cloneChartConfiguration(this.pict.resolveStateFromAddress(tmpAddress, pInput));
 
 					if (typeof (tmpPotentialConfigurationObject) !== 'object')
 					{
@@ -530,7 +714,7 @@ class CustomInputHandler extends libPictSectionInputExtension
 
 					if (tmpParsingConfiguration.ObjectType === 'array')
 					{
-						if (Array.isArray(tmpRawData))
+						if (Array.isArray(tmpPotentialConfigurationObject))
 						{
 							if (tmpCurrentStep.Merge)
 							{
@@ -540,13 +724,13 @@ class CustomInputHandler extends libPictSectionInputExtension
 									tmpExistingData = [];
 								}
 								// Merge in the arrays
-								let tmpMergedData = tmpExistingData.concat(tmpRawData);
+								let tmpMergedData = tmpExistingData.concat(tmpPotentialConfigurationObject);
 								this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpMergedData);
 							}
 							else
 							{
 								// Just set the value
-								this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpRawData);
+								this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpPotentialConfigurationObject);
 							}
 						}
 					}
@@ -559,11 +743,11 @@ class CustomInputHandler extends libPictSectionInputExtension
 								// This is the "root" object, so we need to merge or set directly
 								if (tmpCurrentStep.Merge)
 								{
-									tmpChartConfiguration = Object.assign(tmpChartConfiguration, tmpRawData);
+									tmpChartConfiguration = Object.assign(tmpChartConfiguration, tmpPotentialConfigurationObject);
 								}
 								else
 								{
-									tmpChartConfiguration = tmpRawData;
+									tmpChartConfiguration = tmpPotentialConfigurationObject;
 								}
 							}
 							else
@@ -575,20 +759,20 @@ class CustomInputHandler extends libPictSectionInputExtension
 								if (tmpCurrentStep.Merge)
 								{
 									// Merge the objects
-									let tmpMergedData = Object.assign(tmpExistingData, tmpRawData);
+									let tmpMergedData = Object.assign(tmpExistingData, tmpPotentialConfigurationObject);
 									this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpMergedData);
 								}
 								else
 								{
 									// Just set the value
-									this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpRawData);
+									this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpPotentialConfigurationObject);
 								}
 							}
 						}
 						else
 						{
 							// Just set the value?
-							this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpRawData);
+							this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpPotentialConfigurationObject);
 						}
 					}
 					break;
@@ -655,14 +839,14 @@ class CustomInputHandler extends libPictSectionInputExtension
 								else
 								{
 									// Just set the value
-									this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpRawData);
+									this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpSolvedConfiguration);
 								}
 							}
 						}
 						else
 						{
 							// Just set the value?
-							this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpRawData);
+							this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpSolvedConfiguration);
 						}
 					}
 					break;
@@ -712,13 +896,13 @@ class CustomInputHandler extends libPictSectionInputExtension
 						}
 
 						// Add in a custom Tension
-						if (tmpCurrentSolverExpression.Tension)
+						if ((tmpCurrentSolverExpression.Tension !== undefined) && (tmpCurrentSolverExpression.Tension !== null))
 						{
 							tmpDataObject.tension = tmpCurrentSolverExpression.Tension;
 						}
 						
 						// Add in a custom pointRadius
-						if (tmpCurrentSolverExpression.PointRadius)
+						if ((tmpCurrentSolverExpression.PointRadius !== undefined) && (tmpCurrentSolverExpression.PointRadius !== null))
 						{
 							tmpDataObject.pointRadius = tmpCurrentSolverExpression.PointRadius;
 						}
@@ -799,14 +983,14 @@ class CustomInputHandler extends libPictSectionInputExtension
 									else
 									{
 										// Just set the value
-										this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpRawData);
+										this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpSolvedDataSet);
 									}
 								}
 							}
 							else
 							{
 								// Just set the value?
-								this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpRawData);
+								this.pict.manifest.setValueByHash(tmpChartConfiguration, tmpParsingConfiguration.AddressInObject, tmpSolvedDataSet);
 							}
 						}
 					}
@@ -828,7 +1012,7 @@ class CustomInputHandler extends libPictSectionInputExtension
 
 		let tmpPictform = pInput.PictForm;
 
-		let tmpChartConfiguration = (typeof (tmpPictform.ChartJSOptionsCorePrototype) === 'object') ? tmpPictform.ChartJSOptionsCorePrototype : {};
+		let tmpChartConfiguration = (typeof (tmpPictform.ChartJSOptionsCorePrototype) === 'object') ? this._cloneChartConfiguration(tmpPictform.ChartJSOptionsCorePrototype) : {};
 
 		this.applyInputParsingConfiguration(pInput, tmpChartConfiguration, this.defaultCoreParsingConfiguration, 'PictForm.ChartConfigCoreParsingConfigurationOverride');
 		if (!('type' in tmpChartConfiguration))
@@ -923,9 +1107,12 @@ class CustomInputHandler extends libPictSectionInputExtension
 		}
 		else
 		{
+			// Chart.js writes its resolved defaults back into the options it is given
+			const tmpManifestOptions = this._cloneChartConfiguration(tmpChartConfiguration.options || {});
 			this.currentChartObjects[`Object-For-${pInput.Macro.RawHTMLID}`] = new window.Chart(tmpChartCanvasElement, tmpChartConfiguration);
 			// TODO: Make this invalidation better.
 			this.currentChartDataObjects[`Data-For-${pInput.Macro.RawHTMLID}`] = JSON.stringify(tmpChartConfiguration.data);
+			this.refreshChartThemeColors(pInput, this.currentChartObjects[`Object-For-${pInput.Macro.RawHTMLID}`], tmpManifestOptions, true);
 
 			const tmpLegendConfiguration = this.resolveChartLegendConfiguration(pInput);
 			if (tmpLegendConfiguration)
@@ -1034,6 +1221,7 @@ class CustomInputHandler extends libPictSectionInputExtension
 				}
 				this.currentChartDataObjects[`Data-For-${pInput.Macro.RawHTMLID}`] = tmpNewChartDataString;
 			}
+			this.refreshChartThemeColors(pInput, this.currentChartObjects[`Object-For-${pInput.Macro.RawHTMLID}`], tmpChartConfiguration.options);
 		}
 		return super.onDataMarshalToForm(pView, pGroup, pRow, pInput, pValue, pHTMLSelector, pTransactionGUID);
 	}
