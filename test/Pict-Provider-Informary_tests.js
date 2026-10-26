@@ -107,5 +107,87 @@ suite(
 				);
 			}
 		);
+
+		suite(
+			'marshalFormToData honours the datum and record index filters',
+			() =>
+			{
+				const buildElement = (pAttributes) =>
+				{
+					return { getAttribute: (pName) => (pName in pAttributes ? pAttributes[pName] : null) };
+				};
+
+				// A form with two plain inputs and a two-row recordset; the browser holds a value for each.
+				const buildHarness = () =>
+				{
+					const tmpPict = new libPict({ Product: 'MockInformary', ProductVersion: '1.0.0' });
+					tmpPict.addProviderSingleton('Informary', libInformary.default_configuration, libInformary);
+					const tmpInformary = tmpPict.providers.Informary;
+					const tmpElements = [
+						buildElement({ 'data-i-datum': 'Title' }),
+						buildElement({ 'data-i-datum': 'Author' }),
+						buildElement({ 'data-i-datum': 'Price', 'data-i-container': 'Editions', 'data-i-index': '0' }),
+						buildElement({ 'data-i-datum': 'Price', 'data-i-container': 'Editions', 'data-i-index': '1' })
+					];
+					const tmpBrowserValues = {};
+					tmpBrowserValues[tmpInformary.getContentBrowserAddress('Shelf', 'Title')] = 'Browser Title';
+					tmpBrowserValues[tmpInformary.getContentBrowserAddress('Shelf', 'Author')] = 'Browser Author';
+					tmpBrowserValues[tmpInformary.getContentBrowserAddress('Shelf', 'Price', 'Editions', '0')] = 'Browser Price 0';
+					tmpBrowserValues[tmpInformary.getContentBrowserAddress('Shelf', 'Price', 'Editions', '1')] = 'Browser Price 1';
+					tmpInformary.getFormElements = () => tmpElements;
+					tmpPict.ContentAssignment.readContent = (pAddress) => tmpBrowserValues[pAddress];
+					const tmpWrites = [];
+					const tmpManifest = { setValueAtAddress: (pData, pAddress, pValue) => { tmpWrites.push(pAddress); pData[pAddress] = pValue; } };
+					return { informary: tmpInformary, manifest: tmpManifest, writes: tmpWrites };
+				};
+
+				test(
+					'with no datum, every element is copied back',
+					(fDone) =>
+					{
+						const tmpHarness = buildHarness();
+						tmpHarness.informary.marshalFormToData({}, 'Shelf', tmpHarness.manifest);
+						Expect(tmpHarness.writes).to.deep.equal([ 'Title', 'Author', 'Editions[0].Price', 'Editions[1].Price' ]);
+						fDone();
+					}
+				);
+
+				test(
+					'with a datum, only that element is copied back (a stale value elsewhere in the form is left alone)',
+					(fDone) =>
+					{
+						const tmpHarness = buildHarness();
+						const tmpData = { Author: 'Value set by a solver' };
+						tmpHarness.informary.marshalFormToData(tmpData, 'Shelf', tmpHarness.manifest, 'Title');
+						Expect(tmpHarness.writes).to.deep.equal([ 'Title' ]);
+						Expect(tmpData.Title).to.equal('Browser Title');
+						Expect(tmpData.Author).to.equal('Value set by a solver');
+						fDone();
+					}
+				);
+
+				test(
+					'with a datum and a record index, only that row of that column is copied back',
+					(fDone) =>
+					{
+						const tmpHarness = buildHarness();
+						tmpHarness.informary.marshalFormToData({}, 'Shelf', tmpHarness.manifest, 'Price', 1);
+						Expect(tmpHarness.writes).to.deep.equal([ 'Editions[1].Price' ]);
+						fDone();
+					}
+				);
+
+				test(
+					'a null datum is treated as no filter',
+					(fDone) =>
+					{
+						const tmpHarness = buildHarness();
+						tmpHarness.informary.marshalFormToData({}, 'Shelf', tmpHarness.manifest, null);
+						Expect(tmpHarness.writes.length).to.equal(4);
+						fDone();
+					}
+				);
+			}
+		);
 	}
 );

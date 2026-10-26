@@ -106,7 +106,7 @@ class PictDynamicFormsInformary extends libPictProvider
 		const tmpFormElements = this.getFormElements(pFormHash);
 
 		// Optional Filters (so we don't just blindly do the whole form)
-		const tmpDatum = (pDatum != null) ? false : pDatum;
+		const tmpDatum = (pDatum == null) ? false : pDatum;
 		const tmpRecordIndex = (typeof(pRecordIndex) === 'number') ? String(pRecordIndex) : pRecordIndex;
 
 		// Enumerate the form elements, and put data in them for each address
