@@ -649,6 +649,253 @@ suite('Pict-Provider-Input-Chart', () =>
 		});
 	});
 
+	suite('value labels', () =>
+	{
+		const provider = () => new libChartInput(new libPict(), {});
+		const labelConfiguration = (pValueLabels) => provider().resolveChartValueLabelConfiguration({ PictForm: { ChartValueLabels: pValueLabels } });
+
+		/**
+		 * A stand-in for a drawn Chart.js chart: a 0..400 x 0..200 plot area with
+		 * one point element per value, placed at (40 * index + 20, pY(value)).
+		 */
+		const drawnChart = (pDatasets, pOptions) =>
+		{
+			const tmpOptions = pOptions || {};
+			const fY = tmpOptions.y || ((pValue) => 200 - pValue);
+			const tmpMetas = pDatasets.map((pDataset) => (
+				{
+					hidden: !!pDataset.hiddenInLegend,
+					vScale: { axis: 'y' },
+					controller: { getParsed: (pIndex) => ({ x: pIndex, y: pDataset.data[pIndex] }) },
+					data: pDataset.data.map((pValue, pIndex) => (
+						{
+							x: (40 * pIndex) + 20,
+							y: fY(pValue),
+							skip: (pValue === null),
+							options: { radius: 3, borderColor: pDataset.borderColor },
+						})),
+				}));
+			return {
+				chartArea: { left: 0, top: 0, right: 400, bottom: 200 },
+				options: { color: 'rgb(10, 20, 30)', font: { family: 'Arial' } },
+				data: { datasets: pDatasets },
+				getDatasetMeta: (pIndex) => tmpMetas[pIndex],
+				isDatasetVisible: (pIndex) => !tmpMetas[pIndex].hidden,
+			};
+		};
+		// Every character measures 6px wide
+		const measure = (pText) => pText.length * 6;
+
+		test('ChartValueLabels is off unless configured, leaving values to the hover tooltip', () =>
+		{
+			Expect(labelConfiguration(undefined)).to.equal(null);
+			Expect(labelConfiguration(false)).to.equal(null);
+			Expect(labelConfiguration({ Enabled: false })).to.equal(null);
+		});
+
+		test('ChartValueLabels: true labels every dataset above its points and hides overlaps', () =>
+		{
+			Expect(labelConfiguration(true)).to.deep.equal(
+				{ Datasets: 'All', Position: 'top', Offset: 4, Padding: 2, FontSize: 11, FontWeight: 'normal', HideOverlaps: true });
+		});
+
+		test('an unknown Position or a non-numeric size falls back to the default', () =>
+		{
+			const tmpConfiguration = labelConfiguration({ Position: 'sideways', FontSize: 'big', Offset: -3 });
+			Expect(tmpConfiguration.Position).to.equal('top');
+			Expect(tmpConfiguration.FontSize).to.equal(11);
+			Expect(tmpConfiguration.Offset).to.equal(4);
+		});
+
+		test('configuring it adds the drawing plugin and room above the plot', () =>
+		{
+			const tmpConfiguration = resolveChartConfiguration({ ChartValueLabels: true }, [ { label: 'A', data: [ 1, 2 ] } ]);
+			Expect(tmpConfiguration.plugins).to.have.length(1);
+			Expect(tmpConfiguration.plugins[0].id).to.equal('pictValueLabels');
+			Expect(tmpConfiguration.plugins[0].afterDatasetsDraw).to.be.a('function');
+			// FontSize 11 + Offset 4 + Padding 2 on each side
+			Expect(tmpConfiguration.options.layout.padding).to.deep.equal({ top: 19 });
+		});
+
+		test('an explicit layout padding in the manifest is left alone', () =>
+		{
+			const tmpConfiguration = resolveChartConfiguration(
+				{ ChartValueLabels: true, ChartConfigCorePrototypeRaw: { options: { layout: { padding: 8 } }, data: { datasets: [] } } });
+			Expect(tmpConfiguration.options.layout.padding).to.equal(8);
+		});
+
+		test('without it no plugin is added', () =>
+		{
+			const tmpConfiguration = resolveChartConfiguration({}, [ { label: 'A', data: [ 1, 2 ] } ]);
+			Expect(tmpConfiguration.plugins).to.equal(undefined);
+		});
+
+		test('ValueLabels on a dataset solver entry lands on the dataset as pictValueLabels', () =>
+		{
+			const tmpPict = new libPict();
+			const tmpProvider = new libChartInput(tmpPict, {});
+			tmpPict.providers.DynamicSolver = { runSolver: () => [ 1 ] };
+			const tmpConfiguration = tmpProvider.getInputChartConfiguration({ }, {
+				Name: 'C', Hash: 'C', DataType: 'Object',
+				Macro: { RawHTMLID: 'C', InputFullProperties: '', InputChangeHandler: '', ControlAttr: '' },
+				PictForm: { InputType: 'Chart', ChartType: 'line', ChartDatasetsSolvers: [
+					{ Label: 'Reading', DataSolver: 'x', ValueLabels: true },
+					{ Label: 'Limit', DataSolver: 'y', ValueLabels: false },
+					{ Label: 'Other', DataSolver: 'z' } ] },
+			}, {});
+			Expect(tmpConfiguration.data.datasets.map((pDataset) => pDataset.pictValueLabels)).to.deep.equal([ true, false, undefined ]);
+		});
+
+		test('values are formatted without floating-point noise, or to Decimals places', () =>
+		{
+			const tmpProvider = provider();
+			Expect(tmpProvider._formatChartValueLabel(0.1 + 0.2, {})).to.equal('0.3');
+			Expect(tmpProvider._formatChartValueLabel('5.55', {})).to.equal('5.55');
+			Expect(tmpProvider._formatChartValueLabel(5.5, { Decimals: 2 })).to.equal('5.50');
+			Expect(tmpProvider._formatChartValueLabel(0, {})).to.equal('0');
+		});
+
+		test('a blank or non-numeric value gets no label', () =>
+		{
+			const tmpProvider = provider();
+			Expect(tmpProvider._formatChartValueLabel(null, {})).to.equal(null);
+			Expect(tmpProvider._formatChartValueLabel('', {})).to.equal(null);
+			Expect(tmpProvider._formatChartValueLabel(NaN, {})).to.equal(null);
+		});
+
+		test('a label sits centred above its point, clear of the marker', () =>
+		{
+			const tmpLabels = provider()._collectChartValueLabels(drawnChart([ { data: [ 50 ] } ]), labelConfiguration(true), measure);
+			Expect(tmpLabels).to.have.length(1);
+			// Point at (20, 150): radius 3 + offset 4 above it, 15px tall (11 + 2 + 2)
+			Expect(tmpLabels[0]).to.include({ Text: '50', Left: 12, Top: 128, Width: 16, Height: 15, X: 20, Y: 135.5, Color: 'rgb(10, 20, 30)' });
+		});
+
+		test('a label that would leave the top of the plot flips below its point', () =>
+		{
+			const tmpLabels = provider()._collectChartValueLabels(drawnChart([ { data: [ 195 ] } ]), labelConfiguration(true), measure);
+			// Point at y=5: above would start at -17, so it goes to 5 + 7
+			Expect(tmpLabels[0].Top).to.equal(12);
+		});
+
+		test('a label near a side edge is pulled back inside the plot', () =>
+		{
+			const tmpChart = drawnChart([ { data: [ 50 ] } ]);
+			tmpChart.getDatasetMeta(0).data[0].x = 398;
+			const tmpLabels = provider()._collectChartValueLabels(tmpChart, labelConfiguration(true), measure);
+			Expect(tmpLabels[0].Left + tmpLabels[0].Width).to.equal(400);
+		});
+
+		test('Position bottom puts the label under its point', () =>
+		{
+			const tmpLabels = provider()._collectChartValueLabels(drawnChart([ { data: [ 50 ] } ]), labelConfiguration({ Position: 'bottom' }), measure);
+			Expect(tmpLabels[0].Top).to.equal(157);
+		});
+
+		test('blank points, hidden datasets and datasets opted out get no labels', () =>
+		{
+			const tmpChart = drawnChart([
+				{ data: [ 10, null, 30 ] },
+				{ data: [ 40 ], hiddenInLegend: true },
+				{ data: [ 50 ], pictValueLabels: false },
+			]);
+			const tmpLabels = provider()._collectChartValueLabels(tmpChart, labelConfiguration(true), measure);
+			Expect(tmpLabels.map((pLabel) => pLabel.Text)).to.deep.equal([ '10', '30' ]);
+		});
+
+		test('Datasets: OptIn labels only the datasets that ask for it', () =>
+		{
+			const tmpChart = drawnChart([ { data: [ 10 ] }, { data: [ 20 ], pictValueLabels: true } ]);
+			const tmpLabels = provider()._collectChartValueLabels(tmpChart, labelConfiguration({ Datasets: 'OptIn' }), measure);
+			Expect(tmpLabels.map((pLabel) => pLabel.Text)).to.deep.equal([ '20' ]);
+		});
+
+		test('Color: Dataset draws each label in its series colour', () =>
+		{
+			const tmpChart = drawnChart([ { data: [ 10 ], borderColor: '#E03131' } ]);
+			const tmpLabels = provider()._collectChartValueLabels(tmpChart, labelConfiguration({ Color: 'Dataset' }), measure);
+			Expect(tmpLabels[0].Color).to.equal('#E03131');
+		});
+
+		test('a label that collides moves to the other side of its point when that is clear', () =>
+		{
+			// Two series one pixel apart at the same x: the second's label goes underneath
+			const tmpChart = drawnChart([ { data: [ 50, 100 ] }, { data: [ 51, 10 ] } ]);
+			const tmpProvider = provider();
+			const tmpLabels = tmpProvider._layoutChartValueLabels(tmpProvider._collectChartValueLabels(tmpChart, labelConfiguration(true), measure), true);
+			Expect(tmpLabels.map((pLabel) => `${pLabel.DatasetIndex}:${pLabel.Text}`)).to.deep.equal([ '0:50', '0:100', '1:51', '1:10' ]);
+			// Point at y=151, radius 3 + offset 4 below it
+			Expect(tmpLabels[2]).to.include({ Top: 156, Y: 163.5 });
+		});
+
+		test('a label with both sides taken is hidden; the earlier datasets keep theirs', () =>
+		{
+			const tmpChart = drawnChart([ { data: [ 50 ] }, { data: [ 51 ] }, { data: [ 50 ] } ]);
+			const tmpProvider = provider();
+			const tmpLabels = tmpProvider._layoutChartValueLabels(tmpProvider._collectChartValueLabels(tmpChart, labelConfiguration(true), measure), true);
+			Expect(tmpLabels.map((pLabel) => `${pLabel.DatasetIndex}:${pLabel.Text}`)).to.deep.equal([ '0:50', '1:51' ]);
+		});
+
+		test('a label already flipped off the top edge has no other side to try', () =>
+		{
+			const tmpLabels = provider()._collectChartValueLabels(drawnChart([ { data: [ 195 ] } ]), labelConfiguration(true), measure);
+			Expect(tmpLabels[0].AlternateTop).to.equal(null);
+		});
+
+		test('HideOverlaps: false keeps every label', () =>
+		{
+			const tmpChart = drawnChart([ { data: [ 50 ] }, { data: [ 51 ] } ]);
+			const tmpProvider = provider();
+			const tmpLabels = tmpProvider._layoutChartValueLabels(tmpProvider._collectChartValueLabels(tmpChart, labelConfiguration(true), measure), false);
+			Expect(tmpLabels).to.have.length(2);
+		});
+
+		const recordingContext = (pChart, pCalls) => (
+			{
+				save: () => {},
+				restore: () => {},
+				measureText: (pText) => ({ width: measure(pText) }),
+				strokeText: (pText) => pCalls.push({ Op: 'stroke', Text: pText, Stroke: pChart.ctx.strokeStyle, Width: pChart.ctx.lineWidth }),
+				fillText: (pText) => pCalls.push({ Op: 'fill', Text: pText, Font: pChart.ctx.font, Fill: pChart.ctx.fillStyle }),
+			});
+
+		test('drawing writes the kept labels to the canvas in the configured font, each over a halo', () =>
+		{
+			const tmpCalls = [];
+			const tmpChart = drawnChart([ { data: [ 50, 51 ] }, { data: [ 50 ] }, { data: [ 50 ] } ]);
+			tmpChart.ctx = recordingContext(tmpChart, tmpCalls);
+			const tmpDrawn = provider().drawChartValueLabels(tmpChart, labelConfiguration({ FontWeight: 'bold' }));
+			// The third dataset's 50 has both sides of its point taken
+			Expect(tmpDrawn).to.equal(3);
+			Expect(tmpCalls.map((pCall) => `${pCall.Op}:${pCall.Text}`)).to.deep.equal([ 'stroke:50', 'fill:50', 'stroke:51', 'fill:51', 'stroke:50', 'fill:50' ]);
+			Expect(tmpCalls[1].Font).to.equal('bold 11px Arial');
+			Expect(tmpCalls[1].Fill).to.equal('rgb(10, 20, 30)');
+			// Dark text gets a light halo
+			Expect(tmpCalls[0]).to.include({ Stroke: 'rgba(255, 255, 255, 0.85)', Width: 3 });
+		});
+
+		test('light text gets a dark halo, and HaloColor / HaloWidth override it', () =>
+		{
+			const tmpProvider = provider();
+			Expect(tmpProvider._chartValueLabelHaloColor('rgb(230, 230, 230)')).to.equal('rgba(0, 0, 0, 0.75)');
+			Expect(tmpProvider._chartValueLabelHaloColor('#333')).to.equal('rgba(255, 255, 255, 0.85)');
+			const tmpCalls = [];
+			const tmpChart = drawnChart([ { data: [ 50 ] } ]);
+			tmpChart.ctx = recordingContext(tmpChart, tmpCalls);
+			tmpProvider.drawChartValueLabels(tmpChart, labelConfiguration({ HaloColor: 'navy', HaloWidth: 5 }));
+			Expect(tmpCalls[0]).to.include({ Op: 'stroke', Stroke: 'navy', Width: 5 });
+		});
+
+		test('Halo: false draws the text alone', () =>
+		{
+			const tmpCalls = [];
+			const tmpChart = drawnChart([ { data: [ 50 ] } ]);
+			tmpChart.ctx = recordingContext(tmpChart, tmpCalls);
+			provider().drawChartValueLabels(tmpChart, labelConfiguration({ Halo: false }));
+			Expect(tmpCalls.map((pCall) => pCall.Op)).to.deep.equal([ 'fill' ]);
+		});
+	});
+
 	suite('template', () =>
 	{
 		test('the chart canvas container carries the ChartHeight min-height', () =>

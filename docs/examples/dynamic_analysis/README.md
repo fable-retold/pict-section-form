@@ -28,6 +28,7 @@ data addresses** with a fresh UUID so each copy is its own world.
 | AppData cross-references | `getvalue` / `setvalue` read and write across the data tree |
 | Conditional visibility | A detail section shows itself based on a solved value |
 | Solver-driven charts | `bar` and `polarArea` charts are computed by solver expressions |
+| Chart value labels | A `line` chart draws each point's value, moving or hiding labels that would overlap |
 
 ## Key files
 
@@ -172,6 +173,23 @@ Chart.js type, and the labels and every dataset are **solver expressions**:
 the macro-breakdown chart computes one dataset each for fat, carbohydrates,
 protein, and sugar. The lab also uses a `polarArea` chart with the same
 solver-driven shape.
+
+The Sugar vs Carbohydrates chart in the overview shows values on the points
+without hovering. `ChartValueLabels` turns that on, and `ValueLabels: false`
+leaves one series unlabelled:
+
+```json
+"ChartValueLabels": { "Decimals": 1, "Color": "Dataset" },
+"ChartDatasetsSolvers": [
+  { "Label": "Carbohydrates (g)", "DataSolver": "..." },
+  { "Label": "Sugar (g)", "DataSolver": "..." },
+  { "Label": "Protein (g, unlabelled)", "DataSolver": "...", "ValueLabels": false }
+]
+```
+
+Where two labels would collide, the later series' label moves to the other side
+of its point, and is hidden if that side is taken too. See
+[Point Value Labels](../../input_providers/009-chart.md#point-value-labels).
 
 ## Running the example
 

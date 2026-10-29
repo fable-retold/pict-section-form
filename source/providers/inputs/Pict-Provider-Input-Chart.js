@@ -346,6 +346,324 @@ class CustomInputHandler extends libPictSectionInputExtension
 	}
 
 	/**
+	 * Resolve the ChartValueLabels configuration for an input, filled out with
+	 * defaults. Returns null when values are not drawn on the chart, in which
+	 * case they show only in the hover tooltip.
+	 *
+	 * @param {Object} pInput - The PictForm input object.
+	 * @return {Object|null}
+	 */
+	resolveChartValueLabelConfiguration(pInput)
+	{
+		const tmpPictform = (pInput && pInput.PictForm) || {};
+		let tmpValueLabels = tmpPictform.ChartValueLabels;
+		if (tmpValueLabels === true)
+		{
+			tmpValueLabels = {};
+		}
+		if (!tmpValueLabels || (typeof (tmpValueLabels) !== 'object') || (tmpValueLabels.Enabled === false))
+		{
+			return null;
+		}
+		const tmpConfiguration = Object.assign(
+			{
+				Datasets: 'All',
+				Position: 'top',
+				Offset: 4,
+				Padding: 2,
+				FontSize: 11,
+				FontWeight: 'normal',
+				HideOverlaps: true,
+			}, tmpValueLabels);
+		if ([ 'top', 'bottom', 'center' ].indexOf(tmpConfiguration.Position) < 0)
+		{
+			tmpConfiguration.Position = 'top';
+		}
+		const fNumberOr = (pValue, pDefault) =>
+		{
+			const tmpNumber = parseFloat(pValue);
+			return (isFinite(tmpNumber) && (tmpNumber >= 0)) ? tmpNumber : pDefault;
+		};
+		tmpConfiguration.Offset = fNumberOr(tmpConfiguration.Offset, 4);
+		tmpConfiguration.Padding = fNumberOr(tmpConfiguration.Padding, 2);
+		tmpConfiguration.FontSize = fNumberOr(tmpConfiguration.FontSize, 11) || 11;
+		return tmpConfiguration;
+	}
+
+	/**
+	 * Build the Chart.js inline plugin that draws each point's value on the chart.
+	 *
+	 * @param {Object} pConfiguration - From resolveChartValueLabelConfiguration.
+	 * @return {Object} A Chart.js plugin.
+	 */
+	createChartValueLabelPlugin(pConfiguration)
+	{
+		return (
+			{
+				id: 'pictValueLabels',
+				afterDatasetsDraw: (pChart) =>
+				{
+					this.drawChartValueLabels(pChart, pConfiguration);
+				},
+			});
+	}
+
+	/**
+	 * Format a value for its label: blanks and non-numbers draw nothing, and
+	 * floating-point noise (0.30000000000000004) is trimmed unless Decimals fixes
+	 * the places.
+	 *
+	 * @param {any} pValue - The parsed data value.
+	 * @param {Object} pConfiguration - From resolveChartValueLabelConfiguration.
+	 * @return {string|null} The label text, or null for no label.
+	 */
+	_formatChartValueLabel(pValue, pConfiguration)
+	{
+		if ((pValue === null) || (typeof (pValue) === 'undefined') || (pValue === ''))
+		{
+			return null;
+		}
+		const tmpNumber = Number(pValue);
+		if (!isFinite(tmpNumber))
+		{
+			return null;
+		}
+		const tmpDecimals = parseInt(pConfiguration.Decimals, 10);
+		if (isFinite(tmpDecimals) && (tmpDecimals >= 0))
+		{
+			return tmpNumber.toFixed(Math.min(tmpDecimals, 20));
+		}
+		return String(parseFloat(tmpNumber.toPrecision(12)));
+	}
+
+	/**
+	 * Work out every candidate value label for a drawn chart: its text, colour and
+	 * box. A box that would leave the plot area is flipped to the other side of
+	 * its point, then clamped inside.
+	 *
+	 * @param {Object} pChart - The Chart.js instance.
+	 * @param {Object} pConfiguration - From resolveChartValueLabelConfiguration.
+	 * @param {(pText: string) => number} fMeasureText - Returns the drawn width of a label's text.
+	 * @return {Array<{ Text: string, Color: string, X: number, Y: number, Left: number, Top: number, Width: number, Height: number, DatasetIndex: number, Index: number }>}
+	 */
+	_collectChartValueLabels(pChart, pConfiguration, fMeasureText)
+	{
+		const tmpLabels = [];
+		const tmpArea = pChart && pChart.chartArea;
+		const tmpDatasets = (pChart && pChart.data && pChart.data.datasets) || [];
+		if (!tmpArea)
+		{
+			return tmpLabels;
+		}
+		const tmpAllDatasets = (pConfiguration.Datasets !== 'OptIn');
+		const tmpHeight = pConfiguration.FontSize + (2 * pConfiguration.Padding);
+		for (let i = 0; i < tmpDatasets.length; i++)
+		{
+			const tmpDataset = tmpDatasets[i];
+			if (!tmpDataset)
+			{
+				continue;
+			}
+			const tmpIncluded = (tmpDataset.pictValueLabels === true) || (tmpAllDatasets && (tmpDataset.pictValueLabels !== false));
+			if (!tmpIncluded)
+			{
+				continue;
+			}
+			if ((typeof (pChart.isDatasetVisible) === 'function') && !pChart.isDatasetVisible(i))
+			{
+				continue;
+			}
+			const tmpMeta = pChart.getDatasetMeta(i);
+			if (!tmpMeta || !Array.isArray(tmpMeta.data))
+			{
+				continue;
+			}
+			const tmpValueAxis = (tmpMeta.vScale && tmpMeta.vScale.axis) || 'y';
+			for (let j = 0; j < tmpMeta.data.length; j++)
+			{
+				const tmpElement = tmpMeta.data[j];
+				if (!tmpElement || tmpElement.skip)
+				{
+					continue;
+				}
+				let tmpValue = (tmpMeta.controller && (typeof (tmpMeta.controller.getParsed) === 'function')) ? tmpMeta.controller.getParsed(j) : tmpDataset.data[j];
+				if ((typeof (tmpValue) === 'object') && (tmpValue !== null))
+				{
+					tmpValue = (tmpValueAxis in tmpValue) ? tmpValue[tmpValueAxis] : tmpValue.y;
+				}
+				const tmpText = this._formatChartValueLabel(tmpValue, pConfiguration);
+				if (tmpText === null)
+				{
+					continue;
+				}
+				const tmpPosition = (typeof (tmpElement.tooltipPosition) === 'function') ? tmpElement.tooltipPosition(false) : tmpElement;
+				if (!isFinite(tmpPosition.x) || !isFinite(tmpPosition.y))
+				{
+					continue;
+				}
+				const tmpWidth = fMeasureText(tmpText) + (2 * pConfiguration.Padding);
+				const tmpRadius = (tmpElement.options && isFinite(tmpElement.options.radius)) ? Number(tmpElement.options.radius) : 0;
+				const tmpGap = tmpRadius + pConfiguration.Offset;
+				// Arcs (pie, doughnut, polar area) label their centroid
+				let tmpPlacement = (typeof (tmpElement.outerRadius) === 'number') ? 'center' : pConfiguration.Position;
+				// A bar below its base reads from its far end, so its label goes underneath
+				if ((tmpPlacement !== 'center') && ('base' in tmpElement) && (Number(tmpValue) < 0))
+				{
+					tmpPlacement = (tmpPlacement === 'top') ? 'bottom' : 'top';
+				}
+				const tmpAboveTop = tmpPosition.y - tmpGap - tmpHeight;
+				const tmpBelowTop = tmpPosition.y + tmpGap;
+				const fClampTop = (pTop) => Math.max(tmpArea.top, Math.min(pTop, tmpArea.bottom - tmpHeight));
+				let tmpTop = tmpPosition.y - (tmpHeight / 2);
+				// The other side of the point, tried when the first choice collides with a kept label
+				let tmpAlternateTop = null;
+				if (tmpPlacement === 'top')
+				{
+					const tmpFits = (tmpAboveTop >= tmpArea.top);
+					tmpTop = tmpFits ? tmpAboveTop : tmpBelowTop;
+					tmpAlternateTop = tmpFits ? fClampTop(tmpBelowTop) : null;
+				}
+				else if (tmpPlacement === 'bottom')
+				{
+					const tmpFits = ((tmpBelowTop + tmpHeight) <= tmpArea.bottom);
+					tmpTop = tmpFits ? tmpBelowTop : tmpAboveTop;
+					tmpAlternateTop = tmpFits ? fClampTop(tmpAboveTop) : null;
+				}
+				tmpTop = fClampTop(tmpTop);
+				const tmpLeft = Math.max(tmpArea.left, Math.min(tmpPosition.x - (tmpWidth / 2), tmpArea.right - tmpWidth));
+				let tmpColor = pConfiguration.Color || (pChart.options && pChart.options.color) || '#666';
+				if (pConfiguration.Color === 'Dataset')
+				{
+					tmpColor = (tmpElement.options && tmpElement.options.borderColor) || tmpDataset.borderColor || (pChart.options && pChart.options.color) || '#666';
+				}
+				tmpLabels.push(
+					{
+						Text: tmpText,
+						Color: tmpColor,
+						X: tmpLeft + (tmpWidth / 2),
+						Y: tmpTop + (tmpHeight / 2),
+						Left: tmpLeft,
+						Top: tmpTop,
+						Width: tmpWidth,
+						Height: tmpHeight,
+						AlternateTop: tmpAlternateTop,
+						DatasetIndex: i,
+						Index: j,
+					});
+			}
+		}
+		return tmpLabels;
+	}
+
+	/**
+	 * Keep the labels that fit. A label that would overlap one already kept moves
+	 * to the other side of its point if that is clear, and is hidden otherwise.
+	 * Earlier datasets win, then earlier points, so the series listed first keeps
+	 * its values when series crowd each other.
+	 *
+	 * @param {Array<Object>} pLabels - From _collectChartValueLabels.
+	 * @param {boolean} pHideOverlaps - False keeps every label where it was first placed.
+	 * @return {Array<Object>} The labels to draw.
+	 */
+	_layoutChartValueLabels(pLabels, pHideOverlaps)
+	{
+		if (!pHideOverlaps)
+		{
+			return pLabels;
+		}
+		const tmpKept = [];
+		const fIsClear = (pLeft, pTop, pWidth, pHeight) =>
+		{
+			for (let j = 0; j < tmpKept.length; j++)
+			{
+				const tmpOther = tmpKept[j];
+				if ((pLeft < tmpOther.Left + tmpOther.Width) && (tmpOther.Left < pLeft + pWidth)
+					&& (pTop < tmpOther.Top + tmpOther.Height) && (tmpOther.Top < pTop + pHeight))
+				{
+					return false;
+				}
+			}
+			return true;
+		};
+		for (let i = 0; i < pLabels.length; i++)
+		{
+			const tmpLabel = pLabels[i];
+			if (fIsClear(tmpLabel.Left, tmpLabel.Top, tmpLabel.Width, tmpLabel.Height))
+			{
+				tmpKept.push(tmpLabel);
+			}
+			else if ((typeof (tmpLabel.AlternateTop) === 'number') && fIsClear(tmpLabel.Left, tmpLabel.AlternateTop, tmpLabel.Width, tmpLabel.Height))
+			{
+				tmpKept.push(Object.assign({}, tmpLabel, { Top: tmpLabel.AlternateTop, Y: tmpLabel.AlternateTop + (tmpLabel.Height / 2), AlternateTop: null }));
+			}
+		}
+		return tmpKept;
+	}
+
+	/**
+	 * The halo drawn behind label text so it stays readable over grid lines and
+	 * other series: dark behind light text, light behind dark text.
+	 *
+	 * @param {string} pTextColor - The chart's text colour.
+	 * @return {string} The halo colour.
+	 */
+	_chartValueLabelHaloColor(pTextColor)
+	{
+		const tmpMatch = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/.exec(pTextColor || '');
+		if (tmpMatch)
+		{
+			const tmpLuminance = ((0.299 * Number(tmpMatch[1])) + (0.587 * Number(tmpMatch[2])) + (0.114 * Number(tmpMatch[3]))) / 255;
+			if (tmpLuminance > 0.5)
+			{
+				return 'rgba(0, 0, 0, 0.75)';
+			}
+		}
+		return 'rgba(255, 255, 255, 0.85)';
+	}
+
+	/**
+	 * Draw each point's value on a chart's canvas, after its datasets.
+	 *
+	 * @param {Object} pChart - The Chart.js instance.
+	 * @param {Object} pConfiguration - From resolveChartValueLabelConfiguration.
+	 * @return {number} How many labels were drawn.
+	 */
+	drawChartValueLabels(pChart, pConfiguration)
+	{
+		const tmpContext = pChart && pChart.ctx;
+		if (!tmpContext || !pChart.chartArea)
+		{
+			return 0;
+		}
+		const tmpFamily = (pChart.options && pChart.options.font && pChart.options.font.family) || 'sans-serif';
+		tmpContext.save();
+		tmpContext.font = `${pConfiguration.FontWeight} ${pConfiguration.FontSize}px ${tmpFamily}`;
+		const tmpLabels = this._layoutChartValueLabels(
+			this._collectChartValueLabels(pChart, pConfiguration, (pText) => tmpContext.measureText(pText).width),
+			pConfiguration.HideOverlaps !== false);
+		tmpContext.textAlign = 'center';
+		tmpContext.textBaseline = 'middle';
+		const tmpHaloWidth = parseFloat(pConfiguration.HaloWidth);
+		if (pConfiguration.Halo !== false)
+		{
+			tmpContext.lineJoin = 'round';
+			tmpContext.lineWidth = (isFinite(tmpHaloWidth) && (tmpHaloWidth > 0)) ? tmpHaloWidth : 3;
+			tmpContext.strokeStyle = pConfiguration.HaloColor || this._chartValueLabelHaloColor(pChart.options && pChart.options.color);
+		}
+		for (let i = 0; i < tmpLabels.length; i++)
+		{
+			if (pConfiguration.Halo !== false)
+			{
+				tmpContext.strokeText(tmpLabels[i].Text, tmpLabels[i].X, tmpLabels[i].Y);
+			}
+			tmpContext.fillStyle = tmpLabels[i].Color;
+			tmpContext.fillText(tmpLabels[i].Text, tmpLabels[i].X, tmpLabels[i].Y);
+		}
+		tmpContext.restore();
+		return tmpLabels.length;
+	}
+
+	/**
 	 * Resolve the text and grid colours a chart should draw with from the page
 	 * around its canvas, so the canvas follows the host's light or dark theme the
 	 * way the surrounding HTML does. `--pict-chart-text-color` and
@@ -932,6 +1250,11 @@ class CustomInputHandler extends libPictSectionInputExtension
 							tmpDataObject.pictLegendGroup = tmpCurrentSolverExpression.LegendGroup;
 						}
 
+						if (typeof (tmpCurrentSolverExpression.ValueLabels) === 'boolean')
+						{
+							tmpDataObject.pictValueLabels = tmpCurrentSolverExpression.ValueLabels;
+						}
+
 						if (tmpParsingConfiguration.ObjectType === 'array')
 						{
 							if (Array.isArray(tmpSolvedDataSet))
@@ -1062,6 +1385,26 @@ class CustomInputHandler extends libPictSectionInputExtension
 				tmpChartConfiguration.options.plugins = {};
 			}
 			tmpChartConfiguration.options.plugins.legend = Object.assign({}, tmpChartConfiguration.options.plugins.legend, { display: false });
+		}
+
+		const tmpValueLabelConfiguration = this.resolveChartValueLabelConfiguration(pInput);
+		if (tmpValueLabelConfiguration)
+		{
+			if (!Array.isArray(tmpChartConfiguration.plugins))
+			{
+				tmpChartConfiguration.plugins = [];
+			}
+			tmpChartConfiguration.plugins.push(this.createChartValueLabelPlugin(tmpValueLabelConfiguration));
+			// Room above the plot for the topmost point's label, so it does not have to flip below its point
+			if ((tmpValueLabelConfiguration.Position === 'top') && (typeof (tmpChartConfiguration.options?.layout?.padding) === 'undefined'))
+			{
+				if (typeof (tmpChartConfiguration.options) !== 'object' || tmpChartConfiguration.options === null)
+				{
+					tmpChartConfiguration.options = {};
+				}
+				tmpChartConfiguration.options.layout = Object.assign({}, tmpChartConfiguration.options.layout,
+					{ padding: { top: tmpValueLabelConfiguration.FontSize + tmpValueLabelConfiguration.Offset + (2 * tmpValueLabelConfiguration.Padding) } });
+			}
 		}
 
 		const tmpChartHeight = parseFloat(tmpPictform.ChartHeight);

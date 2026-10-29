@@ -196,6 +196,41 @@ module.exports.default_configuration.pict_configuration =
 					]
 				}
 			},
+			"OverviewChart.SugarAndCarbohydrates":
+			{
+				Name: "Sugar vs Carbohydrates (values on the points; crowded labels move or hide)",
+				Hash: "OverviewSugarCarbChart",
+				DataType: "Object",
+				PictForm:
+				{
+					Section: "OverviewCharts", Group: "OverviewCharts",
+					Row: 2, Width: 12,
+					InputType: "Chart",
+					ChartType: "line",
+					ChartHeight: 320,
+					ChartValueLabels: { Decimals: 1, Color: "Dataset" },
+					ChartLabelsSolver: `objectkeystoarray(aggregationhistogrambyobject(FruitGrid, "name", "nutritions.sugar"))`,
+					ChartDatasetsSolvers:
+					[
+						{
+							Label: 'Carbohydrates (g)',
+							DataSolver: `objectvaluestoarray(aggregationhistogrambyobject(FruitGrid, "name", "nutritions.carbohydrates"))`,
+							DatasetOptions: { borderColor: '#1971C2', backgroundColor: '#1971C2' }
+						},
+						{
+							Label: 'Sugar (g)',
+							DataSolver: `objectvaluestoarray(aggregationhistogrambyobject(FruitGrid, "name", "nutritions.sugar"))`,
+							DatasetOptions: { borderColor: '#E8590C', backgroundColor: '#E8590C' }
+						},
+						{
+							Label: 'Protein (g, unlabelled)',
+							DataSolver: `objectvaluestoarray(aggregationhistogrambyobject(FruitGrid, "name", "nutritions.protein"))`,
+							ValueLabels: false,
+							DatasetOptions: { borderColor: '#868E96', backgroundColor: '#868E96', borderDash: [ 4, 4 ] }
+						}
+					]
+				}
+			},
 		},
 
 		// ════════════════════════════════════════════════════════════

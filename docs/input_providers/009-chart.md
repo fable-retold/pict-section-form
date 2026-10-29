@@ -102,9 +102,57 @@ Raw -> Address (overrides) -> Solver (merges) -> Final Configuration
   "CustomXAxisID": "x-axis-1",
   "Tension": 0.4,
   "PointRadius": 5,
-  "StackGroup": "stack1"
+  "StackGroup": "stack1",
+  "ValueLabels": false
 }
 ```
+
+`ValueLabels` turns one dataset's point value labels off (or on, under
+`"Datasets": "OptIn"`); see [Point Value Labels](#point-value-labels).
+
+### Point Value Labels
+
+Chart.js shows a point's value only in its hover tooltip. `ChartValueLabels`
+draws every value on the chart instead, which also puts the values in a printed
+chart. No Chart.js plugin is needed.
+
+```json
+"ChartValueLabels": true
+```
+
+or, with options:
+
+```json
+"ChartValueLabels": {
+  "Decimals": 1,
+  "Position": "top",
+  "Color": "Dataset"
+}
+```
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `Enabled` | boolean | `true` | `false` turns the labels off while keeping the rest of the block |
+| `Datasets` | string | `"All"` | `"All"` labels every dataset except those with `ValueLabels: false`; `"OptIn"` labels only datasets with `ValueLabels: true` |
+| `Position` | string | `"top"` | `"top"`, `"bottom"` or `"center"` of the point. Arc charts (pie, doughnut, polar area) always label the centre of each slice, and a negative bar's label goes on its far side |
+| `Decimals` | number | — | Fixed decimal places. Without it the value is shown as is, with floating-point noise trimmed |
+| `Color` | string | chart text colour | Any CSS colour, or `"Dataset"` to draw each label in its series' border colour |
+| `FontSize` | number | `11` | Pixels |
+| `FontWeight` | string | `"normal"` | Any CSS font weight |
+| `Offset` | number | `4` | Pixels between the point marker and its label |
+| `Padding` | number | `2` | Pixels around the text that count toward its box when checking for overlap |
+| `HideOverlaps` | boolean | `true` | When a label would overlap one already placed, move it to the other side of its point, or hide it if that side is taken too. `false` draws every label |
+| `Halo` | boolean | `true` | Draw an outline behind the text so it stays readable over lines and grid. It is light behind dark text and dark behind light text, so it follows the page theme |
+| `HaloColor` | string | from the text colour | Any CSS colour |
+| `HaloWidth` | number | `3` | Pixels |
+
+Labels are placed in dataset order and then point order, so list the series
+whose values matter most first: it keeps its labels when series crowd each
+other. A label that would leave the plot area is flipped to the other side of
+its point and kept inside the plot. With `Position: "top"`, the chart reserves
+room above the plot for the highest label, unless the configuration already sets
+`options.layout.padding`. Blank points and datasets hidden from the legend get no
+labels.
 
 ## Examples
 
